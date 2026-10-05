@@ -1,0 +1,23 @@
+CREATE TABLE users (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+
+    email VARCHAR(255) NOT NULL,
+    mobile VARCHAR(20),
+
+    password VARCHAR(255) NOT NULL,
+
+    role VARCHAR(30) NOT NULL DEFAULT 'CUSTOMER',
+
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    CONSTRAINT uk_users_email UNIQUE (email),
+    CONSTRAINT uk_users_mobile UNIQUE (mobile)
+);
