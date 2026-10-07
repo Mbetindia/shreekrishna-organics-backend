@@ -1,5 +1,7 @@
 package com.shreekrishna.organics.auth.controller;
 
+import com.shreekrishna.organics.auth.dto.AuthResponse;
+import com.shreekrishna.organics.auth.dto.LoginRequest;
 import com.shreekrishna.organics.auth.dto.RegisterRequest;
 import com.shreekrishna.organics.auth.dto.RegisterResponse;
 import com.shreekrishna.organics.auth.service.AuthService;
@@ -27,5 +29,13 @@ public class AuthController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(
+            @Valid @RequestBody LoginRequest request) {
+
+        return ResponseEntity.ok(
+                authService.login(request)
+        );
     }
 }
