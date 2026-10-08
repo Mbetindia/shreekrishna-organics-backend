@@ -1,6 +1,7 @@
 
 package com.shreekrishna.organics.product.service;
 
+import com.shreekrishna.organics.exception.ResourceNotFoundException;
 import com.shreekrishna.organics.product.dto.ProductImageResponse;
 import com.shreekrishna.organics.product.entity.Product;
 import com.shreekrishna.organics.product.entity.ProductImage;
@@ -46,10 +47,7 @@ public class ProductImageService {
             MultipartFile file
     ) throws IOException {
 
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException("Product not found")
-                );
+        Product product = getLockedProduct(productId);
 
         Map<String, Object> uploaded =
                 cloudinaryService.uploadImage(file);
@@ -57,44 +55,50 @@ public class ProductImageService {
         String imageUrl = (String) uploaded.get("secure_url");
         String publicId = (String) uploaded.get("public_id");
 
-        if (imageUrl == null || publicId == null) {
-            if (publicId != null) {
-                cloudinaryService.deleteImage(publicId);
+        if (imageUrl == null || imageUrl.isBlank()
+                || publicId == null || publicId.isBlank()) {
+
+            if (publicId != null && !publicId.isBlank()) {
+                cleanupCloudinaryImage(publicId);
             }
 
             throw new IllegalStateException(
-                    "Cloudinary did not return image details"
+                    "Cloudinary did not return valid image details"
             );
         }
 
-        try {
-            ProductImage image = new ProductImage();
+        // Register cleanup before database operations.
+        // If the transaction rolls back, remove uploaded image.
+        registerUploadRollbackCleanup(publicId);
 
-            image.setProduct(product);
-            image.setImageUrl(imageUrl);
-            image.setPublicId(publicId);
+        ProductImage image = new ProductImage();
 
-            long imageCount =
-                    imageRepository.countByProductId(productId);
+        image.setProduct(product);
+        image.setImageUrl(imageUrl);
+        image.setPublicId(publicId);
 
-            image.setPrimary(imageCount == 0);
-            image.setDisplayOrder((int) imageCount);
+        List<ProductImage> existingImages =
+                imageRepository
+                        .findByProductIdOrderByDisplayOrderAscIdAsc(
+                                productId
+                        );
 
-            ProductImage saved =
-                    imageRepository.saveAndFlush(image);
+        // First image becomes primary.
+        image.setPrimary(existingImages.isEmpty());
 
-            return toResponse(saved);
+        // Assign the next display order.
+        int nextDisplayOrder = existingImages.stream()
+                .map(ProductImage::getDisplayOrder)
+                .filter(order -> order != null)
+                .max(Integer::compareTo)
+                .orElse(-1) + 1;
 
-        } catch (RuntimeException exception) {
+        image.setDisplayOrder(nextDisplayOrder);
 
-            try {
-                cloudinaryService.deleteImage(publicId);
-            } catch (Exception cleanupException) {
-                exception.addSuppressed(cleanupException);
-            }
+        ProductImage saved =
+                imageRepository.saveAndFlush(image);
 
-            throw exception;
-        }
+        return toResponse(saved);
     }
 
     // GET PRODUCT IMAGES
@@ -102,8 +106,8 @@ public class ProductImageService {
     public List<ProductImageResponse> getImages(Long productId) {
 
         if (!productRepository.existsById(productId)) {
-            throw new IllegalArgumentException(
-                    "Product not found"
+            throw new ResourceNotFoundException(
+                    "Product not found with ID: " + productId
             );
         }
 
@@ -121,18 +125,14 @@ public class ProductImageService {
             Long imageId
     ) {
 
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Product not found"
-                        )
-                );
+        Product product = getLockedProduct(productId);
 
         ProductImage selectedImage = imageRepository
                 .findByIdAndProductId(imageId, product.getId())
                 .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Image not found for this product"
+                        new ResourceNotFoundException(
+                                "Image not found with ID: " + imageId
+                                        + " for Product ID: " + productId
                         )
                 );
 
@@ -158,17 +158,14 @@ public class ProductImageService {
             Long imageId
     ) {
 
-        if (!productRepository.existsById(productId)) {
-            throw new IllegalArgumentException(
-                    "Product not found"
-            );
-        }
+        getLockedProduct(productId);
 
         ProductImage image = imageRepository
                 .findByIdAndProductId(imageId, productId)
                 .orElseThrow(() ->
-                        new IllegalArgumentException(
-                                "Image not found for this product"
+                        new ResourceNotFoundException(
+                                "Image not found with ID: " + imageId
+                                        + " for Product ID: " + productId
                         )
                 );
 
@@ -180,8 +177,7 @@ public class ProductImageService {
         imageRepository.delete(image);
         imageRepository.flush();
 
-        // If primary image was deleted,
-        // assign another remaining image as primary.
+        // Assign a new primary image if needed.
         if (wasPrimary) {
 
             List<ProductImage> remainingImages =
@@ -191,6 +187,7 @@ public class ProductImageService {
                             );
 
             if (!remainingImages.isEmpty()) {
+
                 ProductImage newPrimary =
                         remainingImages.get(0);
 
@@ -200,30 +197,97 @@ public class ProductImageService {
         }
 
         // Delete Cloudinary image only after DB commit.
+        registerDeleteAfterCommit(publicId);
+    }
+
+    // GET PRODUCT WITH DATABASE WRITE LOCK
+    private Product getLockedProduct(Long productId) {
+
+        return productRepository
+                .findByIdForUpdate(productId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Product not found with ID: " + productId
+                        )
+                );
+    }
+
+    // CLEAN UP NEW UPLOAD IF DATABASE TRANSACTION ROLLS BACK
+    private void registerUploadRollbackCleanup(String publicId) {
+
+        if (!TransactionSynchronizationManager
+                .isSynchronizationActive()) {
+
+            cleanupCloudinaryImage(publicId);
+
+            throw new IllegalStateException(
+                    "No active transaction synchronization for image upload"
+            );
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+
+                    @Override
+                    public void afterCompletion(int status) {
+
+                        if (status != STATUS_COMMITTED) {
+
+                            log.warn(
+                                    "Image upload transaction did not commit. "
+                                            + "Cleaning Cloudinary image: {}",
+                                    publicId
+                            );
+
+                            cleanupCloudinaryImage(publicId);
+                        }
+                    }
+                }
+        );
+    }
+
+    // CLEAN UP DELETED IMAGE ONLY AFTER DATABASE COMMIT
+    private void registerDeleteAfterCommit(String publicId) {
+
+        if (!TransactionSynchronizationManager
+                .isSynchronizationActive()) {
+
+            throw new IllegalStateException(
+                    "No active transaction synchronization for image deletion"
+            );
+        }
+
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
 
                     @Override
                     public void afterCommit() {
-                        try {
-                            cloudinaryService.deleteImage(publicId);
 
-                            log.info(
-                                    "Cloudinary image deleted: {}",
-                                    publicId
-                            );
-
-                        } catch (Exception exception) {
-
-                            log.error(
-                                    "Cloudinary cleanup failed for image: {}",
-                                    publicId,
-                                    exception
-                            );
-                        }
+                        cleanupCloudinaryImage(publicId);
                     }
                 }
         );
+    }
+
+    // BEST-EFFORT CLOUDINARY CLEANUP
+    private void cleanupCloudinaryImage(String publicId) {
+
+        try {
+            cloudinaryService.deleteImage(publicId);
+
+            log.info(
+                    "Cloudinary image cleanup successful: {}",
+                    publicId
+            );
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Cloudinary image cleanup failed for public ID: {}",
+                    publicId,
+                    exception
+            );
+        }
     }
 
     // CONVERT ENTITY TO RESPONSE
