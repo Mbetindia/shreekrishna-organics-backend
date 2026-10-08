@@ -1,10 +1,13 @@
+
 package com.shreekrishna.organics.config;
 
 import com.shreekrishna.organics.security.JwtAuthenticationFilter;
 import com.shreekrishna.organics.security.RestAccessDeniedHandler;
 import com.shreekrishna.organics.security.RestAuthenticationEntryPoint;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -26,8 +29,8 @@ public class SecurityConfig {
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             RestAuthenticationEntryPoint authenticationEntryPoint,
-            RestAccessDeniedHandler accessDeniedHandler) {
-
+            RestAccessDeniedHandler accessDeniedHandler
+    ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
@@ -35,7 +38,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
+            HttpSecurity http
+    ) throws Exception {
 
         http
                 .csrf(csrf -> csrf.disable())
@@ -48,18 +52,24 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // Public endpoints
+                        // PUBLIC ENDPOINTS
                         .requestMatchers(
                                 "/api/v1/health",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login"
                         ).permitAll()
 
-                        // Admin endpoints
+                        // PUBLIC PRODUCT IMAGES - GET ONLY
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/products/*/images"
+                        ).permitAll()
+
+                        // ADMIN ENDPOINTS
                         .requestMatchers("/api/v1/admin/**")
                         .hasRole("ADMIN")
 
-                        // Everything else requires authentication
+                        // ALL OTHER ENDPOINTS REQUIRE LOGIN
                         .anyRequest()
                         .authenticated()
                 )
@@ -75,6 +85,7 @@ public class SecurityConfig {
                 )
 
                 .formLogin(form -> form.disable())
+
                 .httpBasic(basic -> basic.disable())
 
                 .addFilterBefore(
@@ -92,8 +103,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration)
-            throws Exception {
+            AuthenticationConfiguration configuration
+    ) throws Exception {
 
         return configuration.getAuthenticationManager();
     }
