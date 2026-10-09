@@ -18,4 +18,3 @@ public interface ProductVariantRepository
 
     List<ProductVariant> findByProduct_IdAndActiveTrue(Long productId);
 }
-
