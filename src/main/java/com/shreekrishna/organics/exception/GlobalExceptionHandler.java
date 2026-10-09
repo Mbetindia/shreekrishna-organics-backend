@@ -13,6 +13,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatusCode;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -150,6 +152,27 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
+                .body(response);
+    }
+    // RESPONSE STATUS EXCEPTION - 400, 404, 409 etc.
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            ResponseStatusException exception,
+            HttpServletRequest request
+    ) {
+        HttpStatusCode status = exception.getStatusCode();
+
+        ErrorResponse response = new ErrorResponse(
+                LocalDateTime.now(),
+                status.value(),
+                HttpStatus.valueOf(status.value()).getReasonPhrase(),
+                exception.getReason(),
+                request.getRequestURI(),
+                null
+        );
+
+        return ResponseEntity
+                .status(status)
                 .body(response);
     }
 
