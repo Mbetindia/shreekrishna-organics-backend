@@ -1,6 +1,8 @@
 
 package com.shreekrishna.organics.product.dto;
 
+import com.shreekrishna.organics.offer.entity.DiscountType;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -17,6 +19,13 @@ public class ProductVariantResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // Hot Deals fields
+    private DiscountType discountType;
+    private BigDecimal discountValue;
+    private BigDecimal discountedPrice;
+    private Boolean offerActive;
+
+    // Existing constructor retained for compatibility
     public ProductVariantResponse(
             Long id,
             Long productId,
@@ -39,6 +48,12 @@ public class ProductVariantResponse {
         this.active = active;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+
+        // Default values when no offer is applied
+        this.discountType = null;
+        this.discountValue = null;
+        this.discountedPrice = price;
+        this.offerActive = false;
     }
 
     public Long getId() {
@@ -79,5 +94,41 @@ public class ProductVariantResponse {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    // Hot Deals getters
+
+    public DiscountType getDiscountType() {
+        return discountType;
+    }
+
+    public BigDecimal getDiscountValue() {
+        return discountValue;
+    }
+
+    public BigDecimal getDiscountedPrice() {
+        return discountedPrice;
+    }
+
+    public Boolean getOfferActive() {
+        return offerActive;
+    }
+
+    // Hot Deals setters
+
+    public void setDiscountType(DiscountType discountType) {
+        this.discountType = discountType;
+    }
+
+    public void setDiscountValue(BigDecimal discountValue) {
+        this.discountValue = discountValue;
+    }
+
+    public void setDiscountedPrice(BigDecimal discountedPrice) {
+        this.discountedPrice = discountedPrice;
+    }
+
+    public void setOfferActive(Boolean offerActive) {
+        this.offerActive = offerActive;
     }
 }
