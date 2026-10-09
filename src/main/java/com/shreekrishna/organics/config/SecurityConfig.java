@@ -66,7 +66,10 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // ADMIN ENDPOINTS
-                        .requestMatchers("/api/v1/admin/**")
+                        .requestMatchers(
+                                "/api/admin/**",
+                                "/api/v1/admin/**"
+                        )
                         .hasRole("ADMIN")
 
                         // ALL OTHER ENDPOINTS REQUIRE LOGIN
