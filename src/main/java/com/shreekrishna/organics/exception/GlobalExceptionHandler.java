@@ -3,18 +3,18 @@ package com.shreekrishna.organics.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatusCode;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -23,8 +23,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceAlreadyExistsException.class)
     public ResponseEntity<ErrorResponse> handleResourceAlreadyExists(
             ResourceAlreadyExistsException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
         ErrorResponse response = new ErrorResponse(
                 LocalDateTime.now(),
@@ -44,15 +43,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(
             MethodArgumentNotValidException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
-        Map<String, String> validationErrors =
-                new LinkedHashMap<>();
+        Map<String, String> validationErrors = new LinkedHashMap<>();
 
         for (FieldError error :
                 exception.getBindingResult().getFieldErrors()) {
-
             validationErrors.putIfAbsent(
                     error.getField(),
                     error.getDefaultMessage()
@@ -71,12 +67,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(response);
     }
 
-    // INVALID ARGUMENT / IMAGE VALIDATION - 400
+    // INVALID ARGUMENT - 400
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(
             IllegalArgumentException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
         ErrorResponse response = new ErrorResponse(
                 LocalDateTime.now(),
@@ -96,8 +91,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentials(
             BadCredentialsException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
         ErrorResponse response = new ErrorResponse(
                 LocalDateTime.now(),
@@ -117,8 +111,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFound(
             ResourceNotFoundException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
         ErrorResponse response = new ErrorResponse(
                 LocalDateTime.now(),
@@ -138,8 +131,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnauthorizedResourceAccessException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorizedResourceAccess(
             UnauthorizedResourceAccessException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
         ErrorResponse response = new ErrorResponse(
                 LocalDateTime.now(),
@@ -154,12 +146,13 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.FORBIDDEN)
                 .body(response);
     }
+
     // RESPONSE STATUS EXCEPTION - 400, 404, 409 etc.
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatusException(
             ResponseStatusException exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
+
         HttpStatusCode status = exception.getStatusCode();
 
         ErrorResponse response = new ErrorResponse(
@@ -180,8 +173,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception exception,
-            HttpServletRequest request
-    ) {
+            HttpServletRequest request) {
 
         ErrorResponse response = new ErrorResponse(
                 LocalDateTime.now(),
