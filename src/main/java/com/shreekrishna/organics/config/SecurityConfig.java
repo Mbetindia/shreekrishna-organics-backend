@@ -64,6 +64,12 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/v1/products/*/images"
                         ).permitAll()
+                        // PUBLIC COMBO OFFERS - GET ONLY
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/combos",
+                                "/api/combos/*"
+                        ).permitAll()
 
                         // ADMIN ENDPOINTS
                         .requestMatchers(
