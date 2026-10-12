@@ -135,12 +135,20 @@
 			<artifactId>mockito-junit-jupiter</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Razorpay Payment Gateway -->
+		<dependency>
+			<groupId>com.razorpay</groupId>
+			<artifactId>razorpay-java</artifactId>
+			<version>1.4.8</version>
+		</dependency>
 
+		<!-- Apache PDFBox for Order Invoice -->
 		<dependency>
 			<groupId>org.apache.pdfbox</groupId>
 			<artifactId>pdfbox</artifactId>
 			<version>3.0.5</version>
 		</dependency>
+
 	</dependencies>
 
 	<build>

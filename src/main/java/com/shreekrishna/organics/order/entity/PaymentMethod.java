@@ -1,3 +1,6 @@
 package com.shreekrishna.organics.order.entity;
 
-public enum PaymentMethod { COD }
+public enum PaymentMethod {
+    COD,
+    RAZORPAY
+}
