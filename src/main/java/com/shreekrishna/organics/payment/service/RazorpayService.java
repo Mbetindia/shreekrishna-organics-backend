@@ -61,4 +61,29 @@ public class RazorpayService {
 
         return razorpay.orders.create(options);
     }
+    public com.razorpay.Payment fetchPayment(
+            String razorpayPaymentId
+    ) throws RazorpayException {
+
+        if (razorpayPaymentId == null ||
+                razorpayPaymentId.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Razorpay Payment ID is required"
+            );
+        }
+
+        if (keyId == null || keyId.isBlank()
+                || keySecret == null || keySecret.isBlank()) {
+            throw new IllegalStateException(
+                    "Razorpay API keys are not configured"
+            );
+        }
+
+        RazorpayClient razorpay = new RazorpayClient(
+                keyId,
+                keySecret
+        );
+
+        return razorpay.payments.fetch(razorpayPaymentId);
+    }
 }

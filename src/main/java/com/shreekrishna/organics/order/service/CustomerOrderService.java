@@ -22,7 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import com.shreekrishna.organics.payment.repository.PaymentRepository;
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -39,12 +39,15 @@ public class CustomerOrderService {
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final EntityManager em;
+    private final PaymentRepository paymentRepository;
 
     public CustomerOrderService(UserRepository users, AddressRepository addresses,
                                 CartRepository carts, CartItemRepository cartItems,
                                 ProductVariantRepository variants, InventoryRepository inventories,
                                 InventoryService inventoryService, OrderRepository orders,
-                                OrderItemRepository orderItems, EntityManager em) {
+                                OrderItemRepository orderItems, EntityManager em,
+                                PaymentRepository paymentRepository)
+    {
         this.users = users;
         this.addresses = addresses;
         this.carts = carts;
@@ -55,6 +58,7 @@ public class CustomerOrderService {
         this.orders = orders;
         this.orderItems = orderItems;
         this.em = em;
+        this.paymentRepository = paymentRepository;
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +114,7 @@ public class CustomerOrderService {
         order.setUserId(user.getId());
         order.setAddressId(address.getId());
         order.setStatus(OrderStatus.PLACED);
-        order.setPaymentMethod(PaymentMethod.COD);
+        order.setPaymentMethod(request.paymentMethod());
         order.setPaymentStatus(PaymentStatus.PENDING);
         order.setStockState(StockState.RESERVED);
         order.setCurrency("INR");
@@ -147,7 +151,20 @@ public class CustomerOrderService {
             snapshots.add(item);
         }
         order.setSubtotal(subtotal);
-        order.setTotalAmount(subtotal);
+
+        BigDecimal codCharge = BigDecimal.ZERO.setScale(2);
+        BigDecimal finalAmount = subtotal;
+
+        if (request.paymentMethod() == PaymentMethod.COD) {
+            codCharge = subtotal
+                    .multiply(new BigDecimal("0.05"))
+                    .setScale(2, java.math.RoundingMode.HALF_UP);
+
+            finalAmount = subtotal.add(codCharge);
+        }
+
+        order.setCodCharge(codCharge);
+        order.setTotalAmount(finalAmount);
         orders.saveAndFlush(order);
         orderItems.saveAllAndFlush(snapshots);
         cartItems.deleteByCartId(cart.getId());
@@ -172,20 +189,55 @@ public class CustomerOrderService {
     }
 
     public OrderResponse cancel(String email, Long id) {
+
         User user = currentUser(email);
+
         Order order = orders.findOwnedOrderForUpdate(id, user.getId())
                 .orElseThrow(() -> notFound("Order not found"));
-        if (order.getStatus() != OrderStatus.PLACED || order.getStockState() != StockState.RESERVED)
+
+        if (order.getStatus() != OrderStatus.PLACED
+                || order.getStockState() != StockState.RESERVED) {
             throw conflict("This order cannot be cancelled");
-        List<OrderItem> items = orderItems.findByOrder_IdOrderByIdAsc(id);
-        items.stream().sorted(Comparator.comparing(OrderItem::getVariantId))
-                .forEach(item -> inventoryService.releaseStock(item.getVariantId(), item.getQuantity()));
+        }
+
+        // Paid Razorpay order cancellation protection
+        if (order.getPaymentMethod() == PaymentMethod.RAZORPAY
+                && order.getPaymentStatus() == PaymentStatus.PAID) {
+
+            throw conflict(
+                    "Paid Razorpay order cannot be cancelled directly"
+            );
+        }
+
+        // NEW CODE - Payment initiated protection
+        if (order.getPaymentMethod() == PaymentMethod.RAZORPAY
+                && !paymentRepository.findByOrderId(id).isEmpty()) {
+
+            throw conflict(
+                    "Razorpay payment already initiated. Cancellation requires payment reconciliation"
+            );
+        }
+
+        // Existing stock release code
+        List<OrderItem> items =
+                orderItems.findByOrder_IdOrderByIdAsc(id);
+
+        items.stream()
+                .sorted(Comparator.comparing(OrderItem::getVariantId))
+                .forEach(item ->
+                        inventoryService.releaseStock(
+                                item.getVariantId(),
+                                item.getQuantity()
+                        )
+                );
+
         order.setStockState(StockState.RELEASED);
         order.setStatus(OrderStatus.CANCELLED);
+
         orders.saveAndFlush(order);
+
         return response(order, items);
     }
-
     private OrderResponse response(Order o, List<OrderItem> items) {
         return new OrderResponse(o.getId(), o.getOrderNumber(), o.getStatus(), o.getPaymentMethod(),
                 o.getPaymentStatus(), o.getStockState(), o.getSubtotal(), o.getDeliveryCharge(),
