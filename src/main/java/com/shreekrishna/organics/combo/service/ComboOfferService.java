@@ -144,6 +144,15 @@ public class ComboOfferService {
                 .map(this::buildResponse)
                 .toList();
     }
+    // ADMIN: FETCH ACTIVE AND INACTIVE COMBOS
+    @Transactional(readOnly = true)
+    public List<ComboOfferResponse> getAllCombos() {
+        return comboOfferRepository.findAll()
+                .stream()
+                .map(this::buildResponse)
+                .toList();
+    }
+
     @Transactional
     public ComboOfferResponse deactivateCombo(Long comboId) {
 
