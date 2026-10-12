@@ -52,6 +52,12 @@ public class SecurityConfig {
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login"
                         ).permitAll()
+                                // RAZORPAY WEBHOOK - NO JWT REQUIRED
+// Webhook signature is verified inside the controller.
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/payments/razorpay/webhook"
+                                ).permitAll()
 
                         // Admin APIs must remain protected, regardless of HTTP method.
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
