@@ -1,10 +1,8 @@
-
 package com.shreekrishna.organics.config;
 
 import com.shreekrishna.organics.security.JwtAuthenticationFilter;
 import com.shreekrishna.organics.security.RestAccessDeniedHandler;
 import com.shreekrishna.organics.security.RestAuthenticationEntryPoint;
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,7 +15,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -43,35 +40,24 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
-    ) throws Exception {
-
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors ->
-                        cors.configurationSource(corsConfigurationSource())
-                )
-
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.STATELESS
-                        )
-                )
-
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-
-                        // PUBLIC AUTH ENDPOINTS
+                        // Public authentication and health checks
                         .requestMatchers(
                                 "/api/v1/health",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login"
                         ).permitAll()
 
-                        // PUBLIC PRODUCTS - GET ONLY
-                        .requestMatchers(
-                                HttpMethod.GET,
+                        // Admin APIs must remain protected, regardless of HTTP method.
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+
+                        // Public storefront product browsing (GET only).
+                        .requestMatchers(HttpMethod.GET,
                                 "/api/v1/products",
                                 "/api/v1/products/*",
                                 "/api/v1/products/featured",
@@ -81,41 +67,29 @@ public class SecurityConfig {
                                 "/api/v1/product-variants/*"
                         ).permitAll()
 
-                        // PUBLIC COMBO OFFERS - GET ONLY
-                        .requestMatchers(
-                                HttpMethod.GET,
-                                "/api/combos",
-                                "/api/combos/*"
+                        // Public category browsing (GET only).
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/categories",
+                                "/api/v1/categories/*"
                         ).permitAll()
 
-                        // ADMIN ENDPOINTS
-                        .requestMatchers(
-                                "/api/admin/**",
-                                "/api/v1/admin/**"
-                        ).hasRole("ADMIN")
+                        // Only active combos should be returned by the customer controller.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/combos",
+                                "/api/v1/combos/*"
+                        ).permitAll()
 
-                        // ALL OTHER ENDPOINTS REQUIRE LOGIN
+                        // Product-offer storefront endpoints should be added here
+                        // only after verifying ProductOfferController's exact GET mappings.
                         .anyRequest().authenticated()
                 )
-
-                .exceptionHandling(exception ->
-                        exception
-                                .authenticationEntryPoint(
-                                        authenticationEntryPoint
-                                )
-                                .accessDeniedHandler(
-                                        accessDeniedHandler
-                                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler)
                 )
-
                 .formLogin(form -> form.disable())
-
                 .httpBasic(basic -> basic.disable())
-
-                .addFilterBefore(
-                        jwtAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class
-                );
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -134,41 +108,21 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration configuration = new CorsConfiguration();
-
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5173",
                 "http://127.0.0.1:5173"
         ));
-
         configuration.setAllowedMethods(List.of(
-                "GET",
-                "POST",
-                "PUT",
-                "PATCH",
-                "DELETE",
-                "OPTIONS"
+                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
-
         configuration.setAllowedHeaders(List.of(
-                "Authorization",
-                "Content-Type",
-                "Accept"
+                "Authorization", "Content-Type", "Accept"
         ));
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
 
-        configuration.setExposedHeaders(List.of(
-                "Content-Disposition"
-        ));
-
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
-        source.registerCorsConfiguration(
-                "/api/**",
-                configuration
-        );
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
         return source;
     }
 }

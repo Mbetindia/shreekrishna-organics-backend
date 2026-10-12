@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/combos")
+@RequestMapping("/api/v1/combos")
 public class CustomerComboController {
 
     private final ComboOfferService comboOfferService;
