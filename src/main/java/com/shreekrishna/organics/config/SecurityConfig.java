@@ -79,8 +79,11 @@ public class SecurityConfig {
                                 "/api/v1/combos/*"
                         ).permitAll()
 
-                        // Product-offer storefront endpoints should be added here
-                        // only after verifying ProductOfferController's exact GET mappings.
+                        // Public current active product offer (GET only).
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/products/*/offer"
+                        ).permitAll()
+
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exception -> exception
