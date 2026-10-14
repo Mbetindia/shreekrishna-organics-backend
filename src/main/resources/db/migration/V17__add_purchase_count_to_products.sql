@@ -1,0 +1,3 @@
+ALTER TABLE products
+    ADD COLUMN purchase_count INT NOT NULL DEFAULT 0,
+    ADD COLUMN show_purchase_count BOOLEAN NOT NULL DEFAULT FALSE;

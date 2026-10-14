@@ -50,10 +50,7 @@ public class Product {
     )
     private BigDecimal basePrice;
 
-    @Column(
-            precision = 10,
-            scale = 2
-    )
+    @Column(precision = 10, scale = 2)
     private BigDecimal mrp;
 
     @Column(nullable = false)
@@ -65,6 +62,13 @@ public class Product {
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder = 0;
 
+    // Admin-managed display values; not connected to inventory or orders.
+    @Column(name = "purchase_count", nullable = false)
+    private Integer purchaseCount = 0;
+
+    @Column(name = "show_purchase_count", nullable = false)
+    private Boolean showPurchaseCount = false;
+
     @Column(
             name = "created_at",
             nullable = false,
@@ -72,10 +76,7 @@ public class Product {
     )
     private LocalDateTime createdAt;
 
-    @Column(
-            name = "updated_at",
-            nullable = false
-    )
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @PrePersist
@@ -172,6 +173,22 @@ public class Product {
 
     public void setDisplayOrder(Integer displayOrder) {
         this.displayOrder = displayOrder;
+    }
+
+    public Integer getPurchaseCount() {
+        return purchaseCount;
+    }
+
+    public void setPurchaseCount(Integer purchaseCount) {
+        this.purchaseCount = purchaseCount;
+    }
+
+    public Boolean getShowPurchaseCount() {
+        return showPurchaseCount;
+    }
+
+    public void setShowPurchaseCount(Boolean showPurchaseCount) {
+        this.showPurchaseCount = showPurchaseCount;
     }
 
     public LocalDateTime getCreatedAt() {

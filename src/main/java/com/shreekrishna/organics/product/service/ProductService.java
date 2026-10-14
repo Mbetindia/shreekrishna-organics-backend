@@ -71,6 +71,7 @@ public class ProductService {
                         : 0
         );
 
+        // Purchase display defaults are defined in Product entity (0 / false).
         Product savedProduct = productRepository.save(product);
 
         return toResponse(savedProduct);
@@ -159,6 +160,7 @@ public class ProductService {
             product.setDisplayOrder(request.getDisplayOrder());
         }
 
+        // Keep manual purchase display settings unchanged during normal product edits.
         Product updatedProduct = productRepository.save(product);
 
         return toResponse(updatedProduct);
@@ -178,6 +180,37 @@ public class ProductService {
         productRepository.save(product);
     }
 
+    // ADMIN: UPDATE MANUAL PURCHASE DISPLAY (NOT CONNECTED TO SALES OR INVENTORY)
+    @Transactional
+    public ProductResponse updatePurchaseDisplay(
+            Long productId,
+            Integer purchaseCount,
+            Boolean showPurchaseCount
+    ) {
+        if (purchaseCount == null || purchaseCount < 0) {
+            throw new IllegalArgumentException(
+                    "Purchase count must be zero or greater"
+            );
+        }
+
+        if (showPurchaseCount == null) {
+            throw new IllegalArgumentException(
+                    "Show purchase count is required"
+            );
+        }
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Product not found")
+                );
+
+        product.setPurchaseCount(purchaseCount);
+        product.setShowPurchaseCount(showPurchaseCount);
+
+        Product updatedProduct = productRepository.save(product);
+        return toResponse(updatedProduct);
+    }
+
     // ENTITY -> RESPONSE DTO
     private ProductResponse toResponse(Product product) {
 
@@ -195,7 +228,9 @@ public class ProductService {
                 product.getFeatured(),
                 product.getDisplayOrder(),
                 product.getCreatedAt(),
-                product.getUpdatedAt()
+                product.getUpdatedAt(),
+                product.getPurchaseCount(),
+                product.getShowPurchaseCount()
         );
     }
 }

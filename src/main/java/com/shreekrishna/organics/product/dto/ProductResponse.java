@@ -27,6 +27,9 @@ public class ProductResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    private Integer purchaseCount;
+    private Boolean showPurchaseCount;
+
     public ProductResponse(
             Long id,
             Long categoryId,
@@ -41,7 +44,9 @@ public class ProductResponse {
             Boolean featured,
             Integer displayOrder,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            Integer purchaseCount,
+            Boolean showPurchaseCount
     ) {
         this.id = id;
         this.categoryId = categoryId;
@@ -57,6 +62,8 @@ public class ProductResponse {
         this.displayOrder = displayOrder;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.purchaseCount = purchaseCount;
+        this.showPurchaseCount = showPurchaseCount;
     }
 
     public Long getId() {
@@ -113,5 +120,13 @@ public class ProductResponse {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Integer getPurchaseCount() {
+        return purchaseCount;
+    }
+
+    public Boolean getShowPurchaseCount() {
+        return showPurchaseCount;
     }
 }
