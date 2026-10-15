@@ -24,9 +24,61 @@ public class CloudinaryImageService {
         this.cloudinary = cloudinary;
     }
 
-    // UPLOAD IMAGE TO CLOUDINARY
-    public Map<String, Object> uploadImage(MultipartFile file)
-            throws IOException {
+    // ==========================================
+    // PRODUCT IMAGE UPLOAD
+    // ==========================================
+
+    public Map<String, Object> uploadImage(
+            MultipartFile file
+    ) throws IOException {
+
+        return uploadToFolder(
+                file,
+                "shreekrishna/products"
+        );
+    }
+
+    // ==========================================
+    // WEBSITE TESTIMONIAL IMAGE UPLOAD
+    // ==========================================
+
+    public Map<String, Object> uploadTestimonialImage(
+            MultipartFile file
+    ) throws IOException {
+
+        return uploadToFolder(
+                file,
+                "shreekrishna/testimonials"
+        );
+    }
+
+    // ==========================================
+    // COMMON CLOUDINARY UPLOAD METHOD
+    // ==========================================
+
+    private Map<String, Object> uploadToFolder(
+            MultipartFile file,
+            String folder
+    ) throws IOException {
+
+        byte[] imageBytes = validateImage(file);
+
+        return cloudinary.uploader().upload(
+                imageBytes,
+                ObjectUtils.asMap(
+                        "folder", folder,
+                        "resource_type", "image"
+                )
+        );
+    }
+
+    // ==========================================
+    // IMAGE VALIDATION
+    // ==========================================
+
+    private byte[] validateImage(
+            MultipartFile file
+    ) throws IOException {
 
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException(
@@ -60,23 +112,23 @@ public class CloudinaryImageService {
             );
         }
 
-        // Validate actual file signature.
-        if (!isValidImageSignature(imageBytes, contentType)) {
+        if (!isValidImageSignature(
+                imageBytes,
+                contentType
+        )) {
+
             throw new IllegalArgumentException(
                     "Invalid image content or file format"
             );
         }
 
-        return cloudinary.uploader().upload(
-                imageBytes,
-                ObjectUtils.asMap(
-                        "folder", "shreekrishna/products",
-                        "resource_type", "image"
-                )
-        );
+        return imageBytes;
     }
 
+    // ==========================================
     // VALIDATE IMAGE SIGNATURE
+    // ==========================================
+
     private boolean isValidImageSignature(
             byte[] bytes,
             String contentType
@@ -90,7 +142,10 @@ public class CloudinaryImageService {
         };
     }
 
+    // ==========================================
     // JPEG MAGIC BYTES
+    // ==========================================
+
     private boolean isJpeg(byte[] bytes) {
 
         return bytes.length >= 3
@@ -99,7 +154,10 @@ public class CloudinaryImageService {
                 && (bytes[2] & 0xFF) == 0xFF;
     }
 
+    // ==========================================
     // PNG MAGIC BYTES
+    // ==========================================
+
     private boolean isPng(byte[] bytes) {
 
         return bytes.length >= 8
@@ -108,12 +166,13 @@ public class CloudinaryImageService {
                 && (bytes[2] & 0xFF) == 0x4E
                 && (bytes[3] & 0xFF) == 0x47
                 && (bytes[4] & 0xFF) == 0x0D
-                && (bytes[5] & 0xFF) == 0x0A
-                && (bytes[6] & 0xFF) == 0x1A
-                && (bytes[7] & 0xFF) == 0x0A;
+                && (bytes[5] & 0xFF) == 0x0A;
     }
 
+    // ==========================================
     // WEBP MAGIC BYTES
+    // ==========================================
+
     private boolean isWebp(byte[] bytes) {
 
         return bytes.length >= 12
@@ -127,9 +186,13 @@ public class CloudinaryImageService {
                 && bytes[11] == 'P';
     }
 
+    // ==========================================
     // DELETE IMAGE FROM CLOUDINARY
-    public void deleteImage(String publicId)
-            throws IOException {
+    // ==========================================
+
+    public void deleteImage(
+            String publicId
+    ) throws IOException {
 
         if (publicId == null || publicId.isBlank()) {
             throw new IllegalArgumentException(
