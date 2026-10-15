@@ -1,8 +1,6 @@
 package com.shreekrishna.organics.checkout.service;
 
 import com.razorpay.RazorpayException;
-import com.shreekrishna.organics.address.entity.Address;
-import com.shreekrishna.organics.address.repository.AddressRepository;
 import com.shreekrishna.organics.cart.entity.Cart;
 import com.shreekrishna.organics.cart.entity.CartItem;
 import com.shreekrishna.organics.cart.repository.CartRepository;
@@ -30,16 +28,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.*;
 
-/**
- * Stage 3B: verified, transactionally idempotent order finalization.
- * Not ready for live activation until session webhook routing and recovery are in place.
- */
 @Service
 public class CheckoutPaymentFinalizationService {
     private final CheckoutSessionRepository sessions;
     private final CheckoutSessionItemRepository sessionItems;
     private final UserRepository users;
-    private final AddressRepository addresses;
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final PaymentRepository payments;
@@ -51,14 +44,13 @@ public class CheckoutPaymentFinalizationService {
 
     public CheckoutPaymentFinalizationService(
             CheckoutSessionRepository sessions, CheckoutSessionItemRepository sessionItems,
-            UserRepository users, AddressRepository addresses, OrderRepository orders,
+            UserRepository users, OrderRepository orders,
             OrderItemRepository orderItems, PaymentRepository payments, CartRepository carts,
             CartItemRepository cartItems, InventoryService stock, RazorpayService provider,
             RazorpayVerificationService signatures) {
         this.sessions = sessions;
         this.sessionItems = sessionItems;
         this.users = users;
-        this.addresses = addresses;
         this.orders = orders;
         this.orderItems = orderItems;
         this.payments = payments;
@@ -72,8 +64,8 @@ public class CheckoutPaymentFinalizationService {
     @Transactional
     public CheckoutVerifyResponse verify(String email, String sessionId, CheckoutVerifyRequest request)
             throws RazorpayException {
-        if (request == null || blank(request.razorpayOrderId()) ||
-                blank(request.razorpayPaymentId()) || blank(request.razorpaySignature())) {
+        if (request == null || blank(request.razorpayOrderId())
+                || blank(request.razorpayPaymentId()) || blank(request.razorpaySignature())) {
             throw problem(HttpStatus.BAD_REQUEST, "Missing Razorpay verification fields");
         }
         Long userId = users.findByEmail(email)
@@ -87,7 +79,7 @@ public class CheckoutPaymentFinalizationService {
                 request.razorpaySignature())) {
             throw problem(HttpStatus.BAD_REQUEST, "Invalid Razorpay payment signature");
         }
-        // Check real Razorpay capture state, not just the browser callback.
+
         com.razorpay.Payment remote = provider.fetchPayment(request.razorpayPaymentId());
         String state = remote.get("status");
         String remoteOrder = remote.get("order_id");
@@ -102,11 +94,6 @@ public class CheckoutPaymentFinalizationService {
         return finalizeCapturedLocked(session, request.razorpayPaymentId());
     }
 
-    /**
-     * Only call this from a webhook handler AFTER Razorpay webhook signature has
-     * been validated and captured-event fields (order, payment, amount, currency)
-     * have been checked independently. Handler must own the transaction.
-     */
     @Transactional
     public CheckoutVerifyResponse finalizeCapturedWebhook(String razorpayOrderId, String razorpayPaymentId,
                                                             long amountPaise, String currency) {
@@ -124,24 +111,26 @@ public class CheckoutPaymentFinalizationService {
 
     private CheckoutVerifyResponse finalizeCapturedLocked(CheckoutSession s, String paymentId) {
         if ("FINALIZED".equals(s.getStatus())) {
-            if (!paymentId.equals(s.getRazorpayPaymentId()) || s.getFinalizedOrderId() == null)
+            if (!paymentId.equals(s.getRazorpayPaymentId()) || s.getFinalizedOrderId() == null) {
                 throw problem(HttpStatus.CONFLICT, "Session already finalized with another payment");
+            }
             return new CheckoutVerifyResponse(s.getId(), s.getStatus(), s.getFinalizedOrderId());
         }
+
+        // A customer may have deliberately switched this checkout to COD after provider
+        // reconciliation found no live payment. If a late capture arrives, attach it to
+        // the SAME order and convert that order to online-paid. Never create a duplicate.
+        if ("COD_FINALIZED".equals(s.getStatus()) && s.getFinalizedOrderId() != null) {
+            return convertCodOrderAfterLateCapture(s, paymentId);
+        }
+
         if (!"PAYMENT_PENDING".equals(s.getStatus()) || !Boolean.TRUE.equals(s.getStockReserved())
                 || blank(s.getRazorpayOrderId()) || blank(paymentId)) {
             throw problem(HttpStatus.CONFLICT, "Session not eligible; payment needs reconciliation");
         }
-        List<CheckoutSessionItem> snapshots = sessionItems.findBySession_IdOrderByIdAsc(s.getId());
-        if (snapshots.isEmpty()) throw problem(HttpStatus.CONFLICT, "Checkout session is empty");
-        BigDecimal recalculated = snapshots.stream().map(CheckoutSessionItem::getLineTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (recalculated.compareTo(s.getSubtotal()) != 0 ||
-                s.getTotalAmount().compareTo(s.getSubtotal()) != 0) {
-            throw problem(HttpStatus.CONFLICT, "Checkout snapshot total mismatch");
-        }
-        Address a = addresses.findByIdAndUserId(s.getAddressId(), s.getUserId())
-                .orElseThrow(() -> problem(HttpStatus.CONFLICT, "Shipping address no longer available"));
+
+        List<CheckoutSessionItem> snapshots = validateSnapshots(s);
+
         Order o = new Order();
         o.setOrderNumber("SKO-" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT));
         o.setUserId(s.getUserId());
@@ -153,24 +142,115 @@ public class CheckoutPaymentFinalizationService {
         o.setCurrency(s.getCurrency());
         o.setSubtotal(s.getSubtotal());
         o.setTotalAmount(s.getTotalAmount());
-        o.setCodCharge(BigDecimal.ZERO);
-        o.setDeliveryCharge(BigDecimal.ZERO);
-        o.setDiscountAmount(BigDecimal.ZERO);
-        o.setTaxAmount(BigDecimal.ZERO);
-        o.setShippingFullName(a.getFullName());
-        o.setShippingMobile(a.getMobile());
-        o.setShippingAddressLine1(a.getAddressLine1());
-        o.setShippingAddressLine2(a.getAddressLine2());
-        o.setShippingLandmark(a.getLandmark());
-        o.setShippingCity(a.getCity());
-        o.setShippingState(a.getState());
-        o.setShippingPostalCode(a.getPostalCode());
-        o.setShippingCountry(a.getCountry());
+        o.setCodCharge(BigDecimal.ZERO.setScale(2));
+        o.setDeliveryCharge(BigDecimal.ZERO.setScale(2));
+        o.setDiscountAmount(BigDecimal.ZERO.setScale(2));
+        o.setTaxAmount(BigDecimal.ZERO.setScale(2));
+        copyShipping(s, o);
         orders.saveAndFlush(o);
+
+        List<OrderItem> copies = copyOrderItems(o, snapshots);
+        orderItems.saveAllAndFlush(copies);
+
+        Payment p = new Payment();
+        p.setOrderId(o.getId());
+        p.setProvider("RAZORPAY");
+        p.setStatus(com.shreekrishna.organics.payment.entity.PaymentStatus.PAID);
+        p.setRazorpayOrderId(s.getRazorpayOrderId());
+        p.setRazorpayPaymentId(paymentId);
+        p.setAmount(s.getTotalAmount());
+        p.setCurrency(s.getCurrency());
+        payments.saveAndFlush(p);
+
+        s.setRazorpayPaymentId(paymentId);
+        s.setFinalizedOrderId(o.getId());
+        s.setStatus("FINALIZED");
+        sessions.saveAndFlush(s);
+
+        removePurchasedItemsFromCart(s.getUserId(), snapshots);
+        return new CheckoutVerifyResponse(s.getId(), s.getStatus(), o.getId());
+    }
+
+    private CheckoutVerifyResponse convertCodOrderAfterLateCapture(CheckoutSession s, String paymentId) {
+        if (blank(paymentId) || !Boolean.TRUE.equals(s.getStockReserved())) {
+            throw problem(HttpStatus.CONFLICT, "Late captured payment needs manual reconciliation");
+        }
+
+        Order order = orders.findByIdForUpdate(s.getFinalizedOrderId())
+                .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Finalized COD order not found"));
+
+        if (!order.getUserId().equals(s.getUserId())) {
+            throw problem(HttpStatus.CONFLICT, "Checkout and COD order ownership mismatch");
+        }
+
+        Optional<Payment> existingByPaymentId = payments.findByRazorpayPaymentId(paymentId);
+        if (existingByPaymentId.isPresent()) {
+            Payment existing = existingByPaymentId.get();
+            if (!existing.getOrderId().equals(order.getId())
+                    || !s.getRazorpayOrderId().equals(existing.getRazorpayOrderId())) {
+                throw problem(HttpStatus.CONFLICT, "Captured payment already belongs to another order");
+            }
+            s.setRazorpayPaymentId(paymentId);
+            s.setStatus("FINALIZED");
+            sessions.saveAndFlush(s);
+            return new CheckoutVerifyResponse(s.getId(), s.getStatus(), order.getId());
+        }
+
+        if (order.getStatus() != OrderStatus.PLACED
+                || order.getStockState() != StockState.RESERVED
+                || order.getPaymentStatus() != PaymentStatus.PENDING
+                || order.getPaymentMethod() != PaymentMethod.COD) {
+            throw problem(HttpStatus.CONFLICT,
+                    "A late online payment was captured after the COD order changed state; manual refund/reconciliation is required");
+        }
+
+        Payment payment = new Payment();
+        payment.setOrderId(order.getId());
+        payment.setProvider("RAZORPAY");
+        payment.setStatus(com.shreekrishna.organics.payment.entity.PaymentStatus.PAID);
+        payment.setRazorpayOrderId(s.getRazorpayOrderId());
+        payment.setRazorpayPaymentId(paymentId);
+        payment.setAmount(s.getTotalAmount());
+        payment.setCurrency(s.getCurrency());
+        payments.saveAndFlush(payment);
+
+        order.setPaymentMethod(PaymentMethod.RAZORPAY);
+        order.setPaymentStatus(PaymentStatus.PAID);
+        order.setCodCharge(BigDecimal.ZERO.setScale(2));
+        order.setTotalAmount(s.getTotalAmount());
+        orders.saveAndFlush(order);
+
+        s.setRazorpayPaymentId(paymentId);
+        s.setStatus("FINALIZED");
+        sessions.saveAndFlush(s);
+
+        return new CheckoutVerifyResponse(s.getId(), s.getStatus(), order.getId());
+    }
+
+    private List<CheckoutSessionItem> validateSnapshots(CheckoutSession s) {
+        List<CheckoutSessionItem> snapshots = sessionItems.findBySession_IdOrderByIdAsc(s.getId());
+        if (snapshots.isEmpty()) throw problem(HttpStatus.CONFLICT, "Checkout session is empty");
+        BigDecimal recalculated = snapshots.stream().map(CheckoutSessionItem::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (recalculated.compareTo(s.getSubtotal()) != 0
+                || s.getTotalAmount().compareTo(s.getSubtotal()) != 0) {
+            throw problem(HttpStatus.CONFLICT, "Checkout snapshot total mismatch");
+        }
+        if (blank(s.getShippingFullName()) || blank(s.getShippingMobile())
+                || blank(s.getShippingAddressLine1()) || blank(s.getShippingCity())
+                || blank(s.getShippingState()) || blank(s.getShippingPostalCode())
+                || blank(s.getShippingCountry())) {
+            throw problem(HttpStatus.CONFLICT,
+                    "Checkout shipping snapshot is missing; manual reconciliation required");
+        }
+        return snapshots;
+    }
+
+    private List<OrderItem> copyOrderItems(Order order, List<CheckoutSessionItem> snapshots) {
         List<OrderItem> copies = new ArrayList<>();
         for (CheckoutSessionItem item : snapshots) {
             OrderItem copy = new OrderItem();
-            copy.setOrder(o);
+            copy.setOrder(order);
             copy.setVariantId(item.getVariantId());
             copy.setProductId(item.getProductId());
             copy.setProductName(item.getProductName());
@@ -183,35 +263,43 @@ public class CheckoutPaymentFinalizationService {
             copy.setLineTotal(item.getLineTotal());
             copies.add(copy);
         }
-        orderItems.saveAllAndFlush(copies);
-        // Keep existing inventory lifecycle: RESERVED remains until order processing confirms stock.
-        Payment p = new Payment();
-        p.setOrderId(o.getId());
-        p.setProvider("RAZORPAY");
-        p.setStatus(com.shreekrishna.organics.payment.entity.PaymentStatus.PAID);
-        p.setRazorpayOrderId(s.getRazorpayOrderId());
-        p.setRazorpayPaymentId(paymentId);
-        p.setAmount(s.getTotalAmount());
-        p.setCurrency(s.getCurrency());
-        payments.saveAndFlush(p);
-        s.setRazorpayPaymentId(paymentId);
-        s.setFinalizedOrderId(o.getId());
-        s.setStatus("FINALIZED");
-        sessions.saveAndFlush(s);
-        // Clear cart only if it still exactly matches paid snapshot; do not destroy later cart edits.
-        Optional<Cart> cart = carts.findByUserIdForUpdate(s.getUserId());
-        if (cart.isPresent()) {
-            List<CartItem> current = cartItems.findByCartIdOrderByIdAsc(cart.get().getId());
-            Map<Long, Integer> currentQty = new HashMap<>();
-            Map<Long, Integer> paidQty = new HashMap<>();
-            current.forEach(i -> currentQty.merge(i.getVariantId(), i.getQuantity(), Integer::sum));
-            snapshots.forEach(i -> paidQty.merge(i.getVariantId(), i.getQuantity(), Integer::sum));
-            if (currentQty.equals(paidQty)) {
-                cartItems.deleteByCartId(cart.get().getId());
-                cartItems.flush();
+        return copies;
+    }
+
+    private void copyShipping(CheckoutSession s, Order o) {
+        o.setShippingFullName(s.getShippingFullName());
+        o.setShippingMobile(s.getShippingMobile());
+        o.setShippingAddressLine1(s.getShippingAddressLine1());
+        o.setShippingAddressLine2(s.getShippingAddressLine2());
+        o.setShippingLandmark(s.getShippingLandmark());
+        o.setShippingCity(s.getShippingCity());
+        o.setShippingState(s.getShippingState());
+        o.setShippingPostalCode(s.getShippingPostalCode());
+        o.setShippingCountry(s.getShippingCountry());
+    }
+
+    private void removePurchasedItemsFromCart(Long userId, List<CheckoutSessionItem> snapshots) {
+        Optional<Cart> cart = carts.findByUserIdForUpdate(userId);
+        if (cart.isEmpty()) return;
+
+        List<CartItem> current = cartItems.findByCartIdOrderByIdAsc(cart.get().getId());
+        Map<Long, Integer> purchasedQtyByVariant = new HashMap<>();
+        for (CheckoutSessionItem snapshot : snapshots) {
+            purchasedQtyByVariant.merge(snapshot.getVariantId(), snapshot.getQuantity(), Integer::sum);
+        }
+
+        for (CartItem item : current) {
+            Integer purchasedQty = purchasedQtyByVariant.get(item.getVariantId());
+            if (purchasedQty == null || purchasedQty <= 0) continue;
+            int remaining = item.getQuantity() - purchasedQty;
+            if (remaining <= 0) {
+                cartItems.delete(item);
+            } else {
+                item.setQuantity(remaining);
+                cartItems.save(item);
             }
         }
-        return new CheckoutVerifyResponse(s.getId(), s.getStatus(), o.getId());
+        cartItems.flush();
     }
 
     private boolean blank(String v) { return v == null || v.isBlank(); }

@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import com.shreekrishna.organics.payment.repository.PaymentRepository;
+import com.shreekrishna.organics.checkout.repository.CheckoutSessionRepository;
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -40,13 +41,15 @@ public class CustomerOrderService {
     private final OrderItemRepository orderItems;
     private final EntityManager em;
     private final PaymentRepository paymentRepository;
+    private final CheckoutSessionRepository checkoutSessions;
 
     public CustomerOrderService(UserRepository users, AddressRepository addresses,
                                 CartRepository carts, CartItemRepository cartItems,
                                 ProductVariantRepository variants, InventoryRepository inventories,
                                 InventoryService inventoryService, OrderRepository orders,
                                 OrderItemRepository orderItems, EntityManager em,
-                                PaymentRepository paymentRepository)
+                                PaymentRepository paymentRepository,
+                                CheckoutSessionRepository checkoutSessions)
     {
         this.users = users;
         this.addresses = addresses;
@@ -59,6 +62,7 @@ public class CustomerOrderService {
         this.orderItems = orderItems;
         this.em = em;
         this.paymentRepository = paymentRepository;
+        this.checkoutSessions = checkoutSessions;
     }
 
     @Transactional(readOnly = true)
@@ -88,6 +92,16 @@ public class CustomerOrderService {
         User user = currentUser(email);
         // Match CartService's user-row lock to serialize checkout and cart edits.
         em.lock(user, LockModeType.PESSIMISTIC_WRITE);
+        // The legacy /orders endpoint is COD-only. Online orders must be finalized
+        // by the verified checkout-session payment flow, never created before payment.
+        if (request == null || request.paymentMethod() != PaymentMethod.COD) {
+            throw conflict("Online payment must use the checkout-session flow; this endpoint accepts COD only");
+        }
+        // Do not place COD while a captured checkout-session payment might be pending.
+        if (checkoutSessions.existsByUserIdAndStatusInAndIdNot(user.getId(),
+                List.of("PAYMENT_INITIATING", "PAYMENT_PENDING"), "__no_matching_session__")) {
+            throw conflict("An online payment is unresolved. Reconcile it before placing another order");
+        }
         Address address = addresses.findByIdAndUserId(request.addressId(), user.getId())
                 .orElseThrow(() -> notFound("Shipping address not found"));
         Cart cart = carts.findByUserIdForUpdate(user.getId())

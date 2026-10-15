@@ -61,7 +61,13 @@ public class CheckoutDraftService {
         User user = users.findByEmail(email).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Customer not found"));
         // Use the same user-level lock as CustomerOrderService.place() and CartService.
         em.lock(user, LockModeType.PESSIMISTIC_WRITE);
-        addresses.findByIdAndUserId(addressId, user.getId())
+        // Do not permit another checkout while an initiated Razorpay payment may still settle.
+        if (sessions.existsByUserIdAndStatusInAndIdNot(user.getId(),
+                List.of("PAYMENT_INITIATING", "PAYMENT_PENDING"), "__no_matching_session__")) {
+            throw error(HttpStatus.CONFLICT,
+                    "Earlier online payment is unresolved. Check payment status before starting another checkout");
+        }
+        var shippingAddress = addresses.findByIdAndUserId(addressId, user.getId())
                 .orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Shipping address not found"));
 
         Cart cart = carts.findByUserIdForUpdate(user.getId())
@@ -73,6 +79,15 @@ public class CheckoutDraftService {
         session.setId(UUID.randomUUID().toString());
         session.setUserId(user.getId());
         session.setAddressId(addressId);
+        session.setShippingFullName(shippingAddress.getFullName());
+        session.setShippingMobile(shippingAddress.getMobile());
+        session.setShippingAddressLine1(shippingAddress.getAddressLine1());
+        session.setShippingAddressLine2(shippingAddress.getAddressLine2());
+        session.setShippingLandmark(shippingAddress.getLandmark());
+        session.setShippingCity(shippingAddress.getCity());
+        session.setShippingState(shippingAddress.getState());
+        session.setShippingPostalCode(shippingAddress.getPostalCode());
+        session.setShippingCountry(shippingAddress.getCountry());
         session.setStatus("CREATED");
         session.setCurrency("INR");
         session.setStockReserved(false);

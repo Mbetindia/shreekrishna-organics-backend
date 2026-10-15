@@ -21,6 +21,27 @@ public class CheckoutSession {
     @Column(name = "address_id", nullable = false)
     private Long addressId;
 
+
+    // Immutable delivery details captured when this checkout draft is created.
+    @Column(name = "shipping_full_name", length = 150)
+    private String shippingFullName;
+    @Column(name = "shipping_mobile", length = 20)
+    private String shippingMobile;
+    @Column(name = "shipping_address_line1", length = 255)
+    private String shippingAddressLine1;
+    @Column(name = "shipping_address_line2", length = 255)
+    private String shippingAddressLine2;
+    @Column(name = "shipping_landmark", length = 255)
+    private String shippingLandmark;
+    @Column(name = "shipping_city", length = 100)
+    private String shippingCity;
+    @Column(name = "shipping_state", length = 100)
+    private String shippingState;
+    @Column(name = "shipping_postal_code", length = 10)
+    private String shippingPostalCode;
+    @Column(name = "shipping_country", length = 100)
+    private String shippingCountry;
+
     @Column(nullable = false, length = 30)
     private String status = "CREATED";
 

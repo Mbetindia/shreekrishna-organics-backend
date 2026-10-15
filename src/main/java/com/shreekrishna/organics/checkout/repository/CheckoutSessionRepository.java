@@ -12,6 +12,9 @@ import java.util.Optional;
 public interface CheckoutSessionRepository extends JpaRepository<CheckoutSession, String> {
     Optional<CheckoutSession> findByIdAndUserId(String id, Long userId);
     Optional<CheckoutSession> findByRazorpayOrderId(String razorpayOrderId);
+    boolean existsByUserIdAndStatus(Long userId, String status);
+    boolean existsByUserIdAndStatusAndIdNot(Long userId, String status, String id);
+    boolean existsByUserIdAndStatusInAndIdNot(Long userId, List<String> statuses, String id);
     List<CheckoutSession> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
