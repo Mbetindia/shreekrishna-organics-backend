@@ -19,4 +19,17 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :orderId")
     Optional<Order> findByIdForUpdate(@Param("orderId") Long orderId);
+    @Query("""
+       select coalesce(sum(o.totalAmount), 0)
+       from Order o
+       where o.paymentStatus = com.shreekrishna.organics.order.entity.PaymentStatus.PAID
+       """)
+    java.math.BigDecimal calculateRevenue();
+    long countByPaymentStatus(
+            com.shreekrishna.organics.order.entity.PaymentStatus paymentStatus
+    );
+
+    long countByPaymentMethod(
+            com.shreekrishna.organics.order.entity.PaymentMethod paymentMethod
+    );
 }
