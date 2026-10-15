@@ -1,8 +1,10 @@
+
 package com.shreekrishna.organics.config;
 
 import com.shreekrishna.organics.security.JwtAuthenticationFilter;
 import com.shreekrishna.organics.security.RestAccessDeniedHandler;
 import com.shreekrishna.organics.security.RestAuthenticationEntryPoint;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -40,36 +42,64 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http
+    ) throws Exception {
+
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors ->
+                        cors.configurationSource(
+                                corsConfigurationSource()
+                        )
+                )
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
+                )
                 .authorizeHttpRequests(auth -> auth
+
                         // Public authentication and health checks
                         .requestMatchers(
                                 "/api/v1/health",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/login"
                         ).permitAll()
-                                // RAZORPAY WEBHOOK - NO JWT REQUIRED
-// Webhook signature is verified inside the controller.
-                                .requestMatchers(
-                                        HttpMethod.POST,
-                                        "/api/v1/payments/razorpay/webhook"
-                                ).permitAll()
 
-                        // Admin APIs must remain protected, regardless of HTTP method.
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                                // Public Customer Reviews - GET only
-                                .requestMatchers(
-                                        HttpMethod.GET,
-                                        "/api/v1/products/*/reviews",
-                                        "/api/v1/products/*/reviews/summary"
-                                ).permitAll()
+                        // Razorpay webhook
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/payments/razorpay/webhook"
+                        ).permitAll()
 
-                        // Public storefront product browsing (GET only).
-                        .requestMatchers(HttpMethod.GET,
+                        // Admin APIs - ADMIN role required
+                        .requestMatchers(
+                                "/api/v1/admin/**"
+                        ).hasRole("ADMIN")
+
+                        // Public Website Testimonials
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/testimonials"
+                        ).permitAll()
+
+                        // NEW: Public YouTube Videos
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/videos"
+                        ).permitAll()
+
+                        // Public Customer Reviews
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/products/*/reviews",
+                                "/api/v1/products/*/reviews/summary"
+                        ).permitAll()
+
+                        // Public storefront product browsing
+                        .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/v1/products",
                                 "/api/v1/products/*",
                                 "/api/v1/products/featured",
@@ -79,32 +109,43 @@ public class SecurityConfig {
                                 "/api/v1/product-variants/*"
                         ).permitAll()
 
-                        // Public category browsing (GET only).
-                        .requestMatchers(HttpMethod.GET,
+                        // Public category browsing
+                        .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/v1/categories",
                                 "/api/v1/categories/*"
                         ).permitAll()
 
-                        // Only active combos should be returned by the customer controller.
-                        .requestMatchers(HttpMethod.GET,
+                        // Public active combos
+                        .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/v1/combos",
                                 "/api/v1/combos/*"
                         ).permitAll()
 
-                        // Public current active product offer (GET only).
-                        .requestMatchers(HttpMethod.GET,
+                        // Public current product offer
+                        .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/v1/products/*/offer"
                         ).permitAll()
 
+                        // All other APIs require authentication
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint(authenticationEntryPoint)
-                        .accessDeniedHandler(accessDeniedHandler)
+                        .authenticationEntryPoint(
+                                authenticationEntryPoint
+                        )
+                        .accessDeniedHandler(
+                                accessDeniedHandler
+                        )
                 )
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(
+                        jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
         return http.build();
     }
@@ -123,21 +164,41 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+
         CorsConfiguration configuration = new CorsConfiguration();
+
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5173",
                 "http://127.0.0.1:5173"
         ));
-        configuration.setAllowedMethods(List.of(
-                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
-        ));
-        configuration.setAllowedHeaders(List.of(
-                "Authorization", "Content-Type", "Accept"
-        ));
-        configuration.setExposedHeaders(List.of("Content-Disposition"));
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "PATCH",
+                "DELETE",
+                "OPTIONS"
+        ));
+
+        configuration.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept"
+        ));
+
+        configuration.setExposedHeaders(
+                List.of("Content-Disposition")
+        );
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration(
+                "/api/**",
+                configuration
+        );
+
         return source;
     }
 }

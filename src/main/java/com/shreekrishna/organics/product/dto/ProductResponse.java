@@ -1,3 +1,4 @@
+
 package com.shreekrishna.organics.product.dto;
 
 import java.math.BigDecimal;
@@ -18,6 +19,11 @@ public class ProductResponse {
 
     private BigDecimal basePrice;
     private BigDecimal mrp;
+
+    // GST Settings
+    private String hsnCode;
+    private BigDecimal gstRate;
+    private Boolean priceIncludesGst;
 
     private Boolean active;
     private Boolean featured;
@@ -46,7 +52,10 @@ public class ProductResponse {
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
             Integer purchaseCount,
-            Boolean showPurchaseCount
+            Boolean showPurchaseCount,
+            String hsnCode,
+            BigDecimal gstRate,
+            Boolean priceIncludesGst
     ) {
         this.id = id;
         this.categoryId = categoryId;
@@ -64,6 +73,10 @@ public class ProductResponse {
         this.updatedAt = updatedAt;
         this.purchaseCount = purchaseCount;
         this.showPurchaseCount = showPurchaseCount;
+
+        this.hsnCode = hsnCode;
+        this.gstRate = gstRate;
+        this.priceIncludesGst = priceIncludesGst;
     }
 
     public Long getId() {
@@ -100,6 +113,18 @@ public class ProductResponse {
 
     public BigDecimal getMrp() {
         return mrp;
+    }
+
+    public String getHsnCode() {
+        return hsnCode;
+    }
+
+    public BigDecimal getGstRate() {
+        return gstRate;
+    }
+
+    public Boolean getPriceIncludesGst() {
+        return priceIncludesGst;
     }
 
     public Boolean getActive() {

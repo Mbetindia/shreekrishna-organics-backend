@@ -2,20 +2,20 @@ package com.shreekrishna.organics.product.entity;
 
 import com.shreekrishna.organics.category.entity.Category;
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-        name = "products",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_products_slug",
-                        columnNames = "slug"
-                )
-        }
-)
+@Table(name = "products", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_products_slug", columnNames = "slug")
+})
+@Getter
+@Setter
+@NoArgsConstructor
 public class Product {
 
     @Id
@@ -23,17 +23,13 @@ public class Product {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(
-            name = "category_id",
-            nullable = false,
-            foreignKey = @ForeignKey(name = "fk_products_category")
-    )
+    @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
     @Column(nullable = false, length = 200)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 220)
+    @Column(nullable = false, length = 220)
     private String slug;
 
     @Column(name = "short_description", length = 500)
@@ -42,16 +38,20 @@ public class Product {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(
-            name = "base_price",
-            nullable = false,
-            precision = 10,
-            scale = 2
-    )
+    @Column(name = "base_price", nullable = false, precision = 12, scale = 2)
     private BigDecimal basePrice;
 
-    @Column(precision = 10, scale = 2)
+    @Column(precision = 12, scale = 2)
     private BigDecimal mrp;
+
+    @Column(name = "hsn_code", length = 20)
+    private String hsnCode;
+
+    @Column(name = "gst_rate", nullable = false, precision = 5, scale = 2)
+    private BigDecimal gstRate = BigDecimal.ZERO;
+
+    @Column(name = "price_includes_gst", nullable = false)
+    private Boolean priceIncludesGst = true;
 
     @Column(nullable = false)
     private Boolean active = true;
@@ -62,18 +62,13 @@ public class Product {
     @Column(name = "display_order", nullable = false)
     private Integer displayOrder = 0;
 
-    // Admin-managed display values; not connected to inventory or orders.
     @Column(name = "purchase_count", nullable = false)
     private Integer purchaseCount = 0;
 
     @Column(name = "show_purchase_count", nullable = false)
     private Boolean showPurchaseCount = false;
 
-    @Column(
-            name = "created_at",
-            nullable = false,
-            updatable = false
-    )
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
@@ -82,120 +77,12 @@ public class Product {
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();
-        createdAt = now;
+        if (createdAt == null) createdAt = now;
         updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Category getCategory() {
-        return category;
-    }
-
-    public void setCategory(Category category) {
-        this.category = category;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getSlug() {
-        return slug;
-    }
-
-    public void setSlug(String slug) {
-        this.slug = slug;
-    }
-
-    public String getShortDescription() {
-        return shortDescription;
-    }
-
-    public void setShortDescription(String shortDescription) {
-        this.shortDescription = shortDescription;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public BigDecimal getBasePrice() {
-        return basePrice;
-    }
-
-    public void setBasePrice(BigDecimal basePrice) {
-        this.basePrice = basePrice;
-    }
-
-    public BigDecimal getMrp() {
-        return mrp;
-    }
-
-    public void setMrp(BigDecimal mrp) {
-        this.mrp = mrp;
-    }
-
-    public Boolean getActive() {
-        return active;
-    }
-
-    public void setActive(Boolean active) {
-        this.active = active;
-    }
-
-    public Boolean getFeatured() {
-        return featured;
-    }
-
-    public void setFeatured(Boolean featured) {
-        this.featured = featured;
-    }
-
-    public Integer getDisplayOrder() {
-        return displayOrder;
-    }
-
-    public void setDisplayOrder(Integer displayOrder) {
-        this.displayOrder = displayOrder;
-    }
-
-    public Integer getPurchaseCount() {
-        return purchaseCount;
-    }
-
-    public void setPurchaseCount(Integer purchaseCount) {
-        this.purchaseCount = purchaseCount;
-    }
-
-    public Boolean getShowPurchaseCount() {
-        return showPurchaseCount;
-    }
-
-    public void setShowPurchaseCount(Boolean showPurchaseCount) {
-        this.showPurchaseCount = showPurchaseCount;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
     }
 }
