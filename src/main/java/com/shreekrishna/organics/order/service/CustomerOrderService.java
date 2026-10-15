@@ -1,4 +1,5 @@
-package com.shreekrishna.organics.order.service;
+
+        package com.shreekrishna.organics.order.service;
 
 import com.shreekrishna.organics.address.entity.Address;
 import com.shreekrishna.organics.address.repository.AddressRepository;
@@ -42,7 +43,7 @@ public class CustomerOrderService {
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final EntityManager em;
-    private final PaymentRepository paymentRepository;
+      private final PaymentRepository paymentRepository;
     private final CheckoutSessionRepository checkoutSessions;
     private final VariantDeliveryPricingService deliveryPricingService;
 
@@ -53,8 +54,7 @@ public class CustomerOrderService {
                                 OrderItemRepository orderItems, EntityManager em,
                                 PaymentRepository paymentRepository,
                                 CheckoutSessionRepository checkoutSessions,
-                                VariantDeliveryPricingService deliveryPricingService)
-    {
+                                VariantDeliveryPricingService deliveryPricingService) {
         this.users = users;
         this.addresses = addresses;
         this.carts = carts;

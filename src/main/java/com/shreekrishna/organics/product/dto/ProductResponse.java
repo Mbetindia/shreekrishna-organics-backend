@@ -1,3 +1,4 @@
+
 package com.shreekrishna.organics.product.dto;
 
 import java.math.BigDecimal;
@@ -19,6 +20,11 @@ public class ProductResponse {
     private BigDecimal basePrice;
     private BigDecimal mrp;
 
+    // GST Settings
+    private String hsnCode;
+    private BigDecimal gstRate;
+    private Boolean priceIncludesGst;
+
     private Boolean active;
     private Boolean featured;
 
@@ -26,6 +32,9 @@ public class ProductResponse {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    private Integer purchaseCount;
+    private Boolean showPurchaseCount;
 
     public ProductResponse(
             Long id,
@@ -41,7 +50,12 @@ public class ProductResponse {
             Boolean featured,
             Integer displayOrder,
             LocalDateTime createdAt,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            Integer purchaseCount,
+            Boolean showPurchaseCount,
+            String hsnCode,
+            BigDecimal gstRate,
+            Boolean priceIncludesGst
     ) {
         this.id = id;
         this.categoryId = categoryId;
@@ -57,6 +71,12 @@ public class ProductResponse {
         this.displayOrder = displayOrder;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
+        this.purchaseCount = purchaseCount;
+        this.showPurchaseCount = showPurchaseCount;
+
+        this.hsnCode = hsnCode;
+        this.gstRate = gstRate;
+        this.priceIncludesGst = priceIncludesGst;
     }
 
     public Long getId() {
@@ -95,6 +115,18 @@ public class ProductResponse {
         return mrp;
     }
 
+    public String getHsnCode() {
+        return hsnCode;
+    }
+
+    public BigDecimal getGstRate() {
+        return gstRate;
+    }
+
+    public Boolean getPriceIncludesGst() {
+        return priceIncludesGst;
+    }
+
     public Boolean getActive() {
         return active;
     }
@@ -113,5 +145,13 @@ public class ProductResponse {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public Integer getPurchaseCount() {
+        return purchaseCount;
+    }
+
+    public Boolean getShowPurchaseCount() {
+        return showPurchaseCount;
     }
 }
