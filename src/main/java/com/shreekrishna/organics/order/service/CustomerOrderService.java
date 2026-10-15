@@ -1,4 +1,5 @@
-package com.shreekrishna.organics.order.service;
+
+        package com.shreekrishna.organics.order.service;
 
 import com.shreekrishna.organics.address.entity.Address;
 import com.shreekrishna.organics.address.repository.AddressRepository;
@@ -14,6 +15,7 @@ import com.shreekrishna.organics.order.repository.*;
 import com.shreekrishna.organics.product.entity.Product;
 import com.shreekrishna.organics.product.entity.ProductVariant;
 import com.shreekrishna.organics.product.repository.ProductVariantRepository;
+import com.shreekrishna.organics.product.service.VariantDeliveryPricingService;
 import com.shreekrishna.organics.user.entity.User;
 import com.shreekrishna.organics.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import com.shreekrishna.organics.payment.repository.PaymentRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 @Service
@@ -40,13 +43,15 @@ public class CustomerOrderService {
     private final OrderItemRepository orderItems;
     private final EntityManager em;
     private final PaymentRepository paymentRepository;
+    private final VariantDeliveryPricingService deliveryPricingService;
 
     public CustomerOrderService(UserRepository users, AddressRepository addresses,
                                 CartRepository carts, CartItemRepository cartItems,
                                 ProductVariantRepository variants, InventoryRepository inventories,
                                 InventoryService inventoryService, OrderRepository orders,
                                 OrderItemRepository orderItems, EntityManager em,
-                                PaymentRepository paymentRepository)
+                                PaymentRepository paymentRepository,
+                                VariantDeliveryPricingService deliveryPricingService)
     {
         this.users = users;
         this.addresses = addresses;
@@ -59,6 +64,7 @@ public class CustomerOrderService {
         this.orderItems = orderItems;
         this.em = em;
         this.paymentRepository = paymentRepository;
+        this.deliveryPricingService = deliveryPricingService;
     }
 
     @Transactional(readOnly = true)
@@ -68,7 +74,13 @@ public class CustomerOrderService {
         if (cart == null) return new CheckoutSummaryResponse(List.of(), zero(), zero(), zero(), zero(), zero());
         List<CheckoutSummaryResponse.CheckoutItem> items = new ArrayList<>();
         BigDecimal subtotal = zero();
-        for (CartItem ci : cartItems.findByCartIdOrderByIdAsc(cart.getId())) {
+        BigDecimal taxAmount = zero();
+        BigDecimal additionalTax = zero();
+        List<CartItem> selected = cartItems.findByCartIdOrderByIdAsc(cart.getId());
+        for (CartItem ci : selected) {
+            if (ci.getQuantity() == null || ci.getQuantity() <= 0) {
+                throw conflict("Invalid cart quantity");
+            }
             ProductVariant v = variants.findById(ci.getVariantId())
                     .orElseThrow(() -> conflict("Variant no longer exists"));
             Product p = v.getProduct();
@@ -80,8 +92,13 @@ public class CustomerOrderService {
             items.add(new CheckoutSummaryResponse.CheckoutItem(v.getId(), p.getName(),
                     v.getSku(), ci.getQuantity(), v.getPrice(), line, ok));
             subtotal = subtotal.add(line);
+            TaxBreakdown tax = calculateProductTax(p, line);
+            taxAmount = taxAmount.add(tax.taxAmount());
+            additionalTax = additionalTax.add(tax.additionalTax());
         }
-        return new CheckoutSummaryResponse(items, subtotal, zero(), zero(), zero(), subtotal);
+        BigDecimal deliveryCharge = calculateCartDeliveryCharge(selected);
+        BigDecimal total = subtotal.add(deliveryCharge).add(additionalTax);
+        return new CheckoutSummaryResponse(items, subtotal, deliveryCharge, zero(), taxAmount, total);
     }
 
     public OrderResponse place(String email, PlaceOrderRequest request) {
@@ -94,6 +111,9 @@ public class CustomerOrderService {
                 .orElseThrow(() -> conflict("Cart is empty"));
         List<CartItem> selected = cartItems.findByCartIdOrderByIdAsc(cart.getId());
         if (selected.isEmpty()) throw conflict("Cart is empty");
+
+        // Calculate from server-side cart quantities, never from client totals.
+        BigDecimal deliveryCharge = calculateCartDeliveryCharge(selected);
 
         // Reserve variants in a consistent order to reduce lock deadlocks.
         List<CartItem> sorted = new ArrayList<>(selected);
@@ -127,11 +147,13 @@ public class CustomerOrderService {
         order.setShippingState(address.getState());
         order.setShippingPostalCode(address.getPostalCode());
         order.setShippingCountry(address.getCountry());
-        order.setDeliveryCharge(zero());
+        order.setDeliveryCharge(deliveryCharge);
         order.setDiscountAmount(zero());
-        order.setTaxAmount(zero());
+        // Set after calculating each product line (included and excluded GST).
 
         BigDecimal subtotal = zero();
+        BigDecimal taxAmount = zero();
+        BigDecimal additionalTax = zero();
         List<OrderItem> snapshots = new ArrayList<>();
         for (CartItem ci : selected) {
             ProductVariant v = selectedVariants.get(ci.getVariantId());
@@ -148,19 +170,23 @@ public class CustomerOrderService {
             item.setUnitMrp(v.getMrp());
             item.setLineTotal(v.getPrice().multiply(BigDecimal.valueOf(ci.getQuantity())));
             subtotal = subtotal.add(item.getLineTotal());
+            TaxBreakdown tax = calculateProductTax(v.getProduct(), item.getLineTotal());
+            taxAmount = taxAmount.add(tax.taxAmount());
+            additionalTax = additionalTax.add(tax.additionalTax());
             snapshots.add(item);
         }
         order.setSubtotal(subtotal);
+        order.setTaxAmount(taxAmount);
 
         BigDecimal codCharge = BigDecimal.ZERO.setScale(2);
-        BigDecimal finalAmount = subtotal;
+        BigDecimal finalAmount = subtotal.add(deliveryCharge).add(additionalTax);
 
         if (request.paymentMethod() == PaymentMethod.COD) {
             codCharge = subtotal
                     .multiply(new BigDecimal("0.05"))
                     .setScale(2, java.math.RoundingMode.HALF_UP);
 
-            finalAmount = subtotal.add(codCharge);
+            finalAmount = finalAmount.add(codCharge);
         }
 
         order.setCodCharge(codCharge);
@@ -246,6 +272,56 @@ public class CustomerOrderService {
                 o.getShippingLandmark(), o.getShippingCity(), o.getShippingState(),
                 o.getShippingPostalCode(), o.getShippingCountry(), o.getCreatedAt(),
                 items.stream().map(OrderItemResponse::from).toList());
+    }
+
+    /**
+     * Product GST only. Inclusive GST is reported but not added again;
+     * exclusive GST is both reported and added to the payable amount.
+     * Delivery/COD tax treatment must be reviewed separately for invoicing.
+     */
+    private static TaxBreakdown calculateProductTax(Product product, BigDecimal lineTotal) {
+        BigDecimal rate = product.getGstRate() == null ? BigDecimal.ZERO : product.getGstRate();
+        if (rate.signum() < 0 || rate.compareTo(new BigDecimal("100")) > 0) {
+            throw conflict("Invalid GST rate for product: " + product.getName());
+        }
+        if (rate.signum() == 0) return new TaxBreakdown(zero(), zero());
+
+        BigDecimal tax;
+        if (Boolean.TRUE.equals(product.getPriceIncludesGst())) {
+            tax = lineTotal.multiply(rate)
+                    .divide(new BigDecimal("100").add(rate), 2, RoundingMode.HALF_UP);
+            return new TaxBreakdown(tax, zero());
+        }
+        tax = lineTotal.multiply(rate)
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+        return new TaxBreakdown(tax, tax);
+    }
+
+    private record TaxBreakdown(BigDecimal taxAmount, BigDecimal additionalTax) {}
+
+    /** One delivery charge per variant quantity tier, not per individual unit. */
+    private BigDecimal calculateCartDeliveryCharge(List<CartItem> selected) {
+        Map<Long, Integer> quantities = new TreeMap<>();
+        for (CartItem ci : selected) {
+            if (ci.getVariantId() == null || ci.getQuantity() == null || ci.getQuantity() <= 0) {
+                throw conflict("Invalid cart item quantity or variant");
+            }
+            try {
+                quantities.merge(ci.getVariantId(), ci.getQuantity(), Math::addExact);
+            } catch (ArithmeticException ex) {
+                throw conflict("Cart quantity is too large");
+            }
+        }
+
+        List<VariantDeliveryPricingService.VariantQuantity> items = quantities.entrySet()
+                .stream()
+                .map(e -> new VariantDeliveryPricingService.VariantQuantity(e.getKey(), e.getValue()))
+                .toList();
+        try {
+            return deliveryPricingService.calculateTotalDeliveryCharge(items);
+        } catch (IllegalStateException | IllegalArgumentException ex) {
+            throw conflict(ex.getMessage());
+        }
     }
 
     private User currentUser(String email) {
