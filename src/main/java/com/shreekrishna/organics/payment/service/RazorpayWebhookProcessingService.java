@@ -3,6 +3,8 @@ package com.shreekrishna.organics.payment.service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import com.shreekrishna.organics.checkout.repository.CheckoutSessionRepository;
+import com.shreekrishna.organics.checkout.service.CheckoutPaymentFinalizationService;
 import com.shreekrishna.organics.payment.repository.PaymentRepository;
 import com.shreekrishna.organics.order.repository.OrderRepository;
 import com.shreekrishna.organics.payment.repository.PaymentAttemptRepository;
@@ -14,6 +16,8 @@ import com.shreekrishna.organics.payment.repository.PaymentRefundRepository;
 public class RazorpayWebhookProcessingService {
 
     private final ObjectMapper objectMapper;
+    private final CheckoutSessionRepository checkoutSessionRepository;
+    private final CheckoutPaymentFinalizationService checkoutFinalizer;
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
@@ -26,9 +30,13 @@ public class RazorpayWebhookProcessingService {
             OrderRepository orderRepository,
             PaymentAttemptRepository paymentAttemptRepository,
             RazorpayWebhookEventRepository webhookEventRepository,
-            PaymentRefundRepository paymentRefundRepository) {
+            PaymentRefundRepository paymentRefundRepository,
+            CheckoutSessionRepository checkoutSessionRepository,
+            CheckoutPaymentFinalizationService checkoutFinalizer) {
 
         this.objectMapper = objectMapper;
+        this.checkoutSessionRepository = checkoutSessionRepository;
+        this.checkoutFinalizer = checkoutFinalizer;
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.paymentAttemptRepository = paymentAttemptRepository;
@@ -147,6 +155,14 @@ public class RazorpayWebhookProcessingService {
         }
 
         long amountInPaise = amountNode.longValue();
+        // New checkout flow: a provider order can belong to a checkout session
+        // without an existing customer order or row in the payments table.
+        // The webhook signature MUST already have been checked by the webhook controller.
+        if (checkoutSessionRepository.findByRazorpayOrderId(razorpayOrderId).isPresent()) {
+            checkoutFinalizer.finalizeCapturedWebhook(
+                    razorpayOrderId, razorpayPaymentId, amountInPaise, currency);
+            return; // Existing order-first payment handler remains unchanged.
+        }
         // Find payment record using Razorpay Order ID
         com.shreekrishna.organics.payment.entity.Payment existingPayment =
                 paymentRepository.findByRazorpayOrderId(razorpayOrderId)
@@ -351,6 +367,12 @@ public class RazorpayWebhookProcessingService {
             );
         }
 
+        // A failed attempt on a checkout-session payment is NOT proof that
+        // another attempt cannot capture. Leave the session recoverable.
+        // Future work: record failed attempts in checkout-specific audit table.
+        if (checkoutSessionRepository.findByRazorpayOrderId(razorpayOrderId).isPresent()) {
+            return;
+        }
         // Find the parent payment record
         com.shreekrishna.organics.payment.entity.Payment existingPayment =
                 paymentRepository.findByRazorpayOrderId(razorpayOrderId)

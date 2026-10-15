@@ -33,7 +33,7 @@ class RazorpayWebhookProcessingServiceTest {
     void shouldRejectMissingWebhookEventId() {
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         null, null, null, null, null, null
                 );
 
@@ -49,7 +49,7 @@ class RazorpayWebhookProcessingServiceTest {
     void shouldRejectNullWebhookEventId() {
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         null, null, null, null, null, null
                 );
 
@@ -78,7 +78,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(savedEvent));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         null,
                         null,
@@ -115,7 +115,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(savedEvent));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         null,
                         null,
@@ -145,7 +145,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.empty());
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         null,
                         null,
@@ -215,7 +215,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.empty());
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -310,7 +310,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(payment));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -408,7 +408,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(attempt));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -497,7 +497,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.empty());
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -601,7 +601,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(existingAttempt));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -696,7 +696,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(java.util.List.of());
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -794,7 +794,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(java.util.List.of());
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -902,7 +902,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(java.util.List.of(firstRefund, secondRefund));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -1004,7 +1004,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(java.util.List.of(previousRefund));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -1107,7 +1107,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(existingRefund));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -1202,7 +1202,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(existingRefund));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -1296,7 +1296,7 @@ class RazorpayWebhookProcessingServiceTest {
                 .thenReturn(Optional.of(attempt));
 
         RazorpayWebhookProcessingService service =
-                new RazorpayWebhookProcessingService(
+                newService(
                         new ObjectMapper(),
                         paymentRepository,
                         orderRepository,
@@ -1337,6 +1337,26 @@ class RazorpayWebhookProcessingServiceTest {
         verify(paymentRepository, never()).save(any(Payment.class));
         verify(orderRepository, never()).save(any(Order.class));
         verify(attemptRepository, never()).save(any(PaymentAttempt.class));
+    }
+
+    private RazorpayWebhookProcessingService newService(
+            ObjectMapper objectMapper,
+            PaymentRepository paymentRepository,
+            OrderRepository orderRepository,
+            PaymentAttemptRepository attemptRepository,
+            RazorpayWebhookEventRepository eventRepository,
+            PaymentRefundRepository refundRepository
+    ) {
+        return new RazorpayWebhookProcessingService(
+                objectMapper,
+                paymentRepository,
+                orderRepository,
+                attemptRepository,
+                eventRepository,
+                refundRepository,
+                mock(com.shreekrishna.organics.checkout.repository.CheckoutSessionRepository.class),
+                mock(com.shreekrishna.organics.checkout.service.CheckoutPaymentFinalizationService.class)
+        );
     }
 
 }
