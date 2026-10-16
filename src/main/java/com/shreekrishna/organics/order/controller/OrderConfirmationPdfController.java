@@ -20,16 +20,22 @@ public class OrderConfirmationPdfController {
         this.pdfService = pdfService;
     }
 
+    /**
+     * Kept on the existing URL so current clients do not break.
+     * The generated document now supports COD and Razorpay orders.
+     */
     @GetMapping(value = "/{id}/invoice", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> download(@PathVariable Long id, Authentication authentication) {
-        byte[] pdf = pdfService.generate(authentication.getName(), id);
+        OrderConfirmationPdfService.GeneratedInvoice generated =
+                pdfService.generate(authentication.getName(), id);
+
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment()
-                                .filename("order-confirmation-" + id + ".pdf")
+                                .filename(generated.filename())
                                 .build().toString())
-                .contentLength(pdf.length)
-                .body(pdf);
+                .contentLength(generated.bytes().length)
+                .body(generated.bytes());
     }
 }

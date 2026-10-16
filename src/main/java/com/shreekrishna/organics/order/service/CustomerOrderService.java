@@ -278,9 +278,12 @@ public class CustomerOrderService {
         return response(order, items);
     }
     private OrderResponse response(Order o, List<OrderItem> items) {
+        OrderTaxView.Breakdown tax = OrderTaxView.from(o);
         return new OrderResponse(o.getId(), o.getOrderNumber(), o.getStatus(), o.getPaymentMethod(),
                 o.getPaymentStatus(), o.getStockState(), o.getSubtotal(), o.getDeliveryCharge(),
-                o.getDiscountAmount(), o.getTaxAmount(), o.getTotalAmount(), o.getShippingFullName(),
+                o.getDiscountAmount(), o.getTaxAmount(), tax.taxableAmount(), tax.effectiveGstRate(),
+                tax.cgstAmount(), tax.sgstAmount(), tax.igstAmount(), tax.gstIncludedInSubtotal(),
+                o.getCodCharge(), o.getTotalAmount(), o.getShippingFullName(),
                 o.getShippingMobile(), o.getShippingAddressLine1(), o.getShippingAddressLine2(),
                 o.getShippingLandmark(), o.getShippingCity(), o.getShippingState(),
                 o.getShippingPostalCode(), o.getShippingCountry(), o.getCreatedAt(),
