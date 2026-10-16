@@ -1,3 +1,4 @@
+
 package com.shreekrishna.organics.checkout.entity;
 
 import jakarta.persistence.*;
@@ -8,9 +9,13 @@ import java.math.BigDecimal;
 
 @Entity
 @Table(name = "checkout_session_items")
-@Getter @Setter @NoArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
 public class CheckoutSessionItem {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -46,4 +51,16 @@ public class CheckoutSessionItem {
 
     @Column(name = "line_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal lineTotal;
+
+    // GST rate captured when checkout draft is created.
+    @Column(name = "gst_rate", precision = 5, scale = 2)
+    private BigDecimal gstRate;
+
+    // Whether the saved product price includes GST.
+    @Column(name = "price_includes_gst")
+    private Boolean priceIncludesGst;
+
+    // GST calculated for this checkout item.
+    @Column(name = "tax_amount", precision = 12, scale = 2)
+    private BigDecimal taxAmount;
 }

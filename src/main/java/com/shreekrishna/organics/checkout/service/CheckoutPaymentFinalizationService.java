@@ -96,7 +96,7 @@ public class CheckoutPaymentFinalizationService {
 
     @Transactional
     public CheckoutVerifyResponse finalizeCapturedWebhook(String razorpayOrderId, String razorpayPaymentId,
-                                                            long amountPaise, String currency) {
+                                                          long amountPaise, String currency) {
         CheckoutSession found = sessions.findByRazorpayOrderId(razorpayOrderId)
                 .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Checkout session not found"));
         CheckoutSession session = sessions.findByIdForUpdate(found.getId())
@@ -143,9 +143,9 @@ public class CheckoutPaymentFinalizationService {
         o.setSubtotal(s.getSubtotal());
         o.setTotalAmount(s.getTotalAmount());
         o.setCodCharge(BigDecimal.ZERO.setScale(2));
-        o.setDeliveryCharge(BigDecimal.ZERO.setScale(2));
+        o.setDeliveryCharge(s.getDeliveryCharge());
         o.setDiscountAmount(BigDecimal.ZERO.setScale(2));
-        o.setTaxAmount(BigDecimal.ZERO.setScale(2));
+        o.setTaxAmount(totalSnapshotTax(snapshots));
         copyShipping(s, o);
         orders.saveAndFlush(o);
 
@@ -216,7 +216,11 @@ public class CheckoutPaymentFinalizationService {
 
         order.setPaymentMethod(PaymentMethod.RAZORPAY);
         order.setPaymentStatus(PaymentStatus.PAID);
+        List<CheckoutSessionItem> snapshots = validateSnapshots(s);
+        order.setTaxAmount(totalSnapshotTax(snapshots));
         order.setCodCharge(BigDecimal.ZERO.setScale(2));
+        order.setSubtotal(s.getSubtotal());
+        order.setDeliveryCharge(s.getDeliveryCharge());
         order.setTotalAmount(s.getTotalAmount());
         orders.saveAndFlush(order);
 
@@ -230,10 +234,31 @@ public class CheckoutPaymentFinalizationService {
     private List<CheckoutSessionItem> validateSnapshots(CheckoutSession s) {
         List<CheckoutSessionItem> snapshots = sessionItems.findBySession_IdOrderByIdAsc(s.getId());
         if (snapshots.isEmpty()) throw problem(HttpStatus.CONFLICT, "Checkout session is empty");
-        BigDecimal recalculated = snapshots.stream().map(CheckoutSessionItem::getLineTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (recalculated.compareTo(s.getSubtotal()) != 0
-                || s.getTotalAmount().compareTo(s.getSubtotal()) != 0) {
+
+        BigDecimal subtotal = BigDecimal.ZERO;
+        BigDecimal additionalTax = BigDecimal.ZERO;
+        boolean legacy = snapshots.stream().allMatch(i -> i.getTaxAmount() == null
+                && i.getGstRate() == null && i.getPriceIncludesGst() == null);
+
+        for (CheckoutSessionItem item : snapshots) {
+            if (item.getLineTotal() == null || item.getLineTotal().signum() < 0) {
+                throw problem(HttpStatus.CONFLICT, "Invalid checkout item amount");
+            }
+            subtotal = subtotal.add(item.getLineTotal());
+            if (legacy) continue;
+            if (item.getTaxAmount() == null || item.getGstRate() == null
+                    || item.getPriceIncludesGst() == null || item.getTaxAmount().signum() < 0
+                    || item.getGstRate().signum() < 0
+                    || item.getGstRate().compareTo(new BigDecimal("100")) > 0) {
+                throw problem(HttpStatus.CONFLICT, "Incomplete GST checkout snapshot; payment needs reconciliation");
+            }
+            if (!item.getPriceIncludesGst()) additionalTax = additionalTax.add(item.getTaxAmount());
+        }
+        if (s.getSubtotal() == null || s.getTotalAmount() == null
+                || s.getDeliveryCharge() == null || s.getDeliveryCharge().signum() < 0
+                || s.getSubtotal().signum() <= 0
+                || subtotal.compareTo(s.getSubtotal()) != 0
+                || s.getTotalAmount().compareTo(s.getSubtotal().add(s.getDeliveryCharge()).add(additionalTax)) != 0) {
             throw problem(HttpStatus.CONFLICT, "Checkout snapshot total mismatch");
         }
         if (blank(s.getShippingFullName()) || blank(s.getShippingMobile())
@@ -244,6 +269,11 @@ public class CheckoutPaymentFinalizationService {
                     "Checkout shipping snapshot is missing; manual reconciliation required");
         }
         return snapshots;
+    }
+
+    private BigDecimal totalSnapshotTax(List<CheckoutSessionItem> snapshots) {
+        return snapshots.stream().map(i -> i.getTaxAmount() == null ? BigDecimal.ZERO : i.getTaxAmount())
+                .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
     }
 
     private List<OrderItem> copyOrderItems(Order order, List<CheckoutSessionItem> snapshots) {

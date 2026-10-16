@@ -164,7 +164,10 @@ public class CheckoutSwitchToCodService {
         if (!PAYMENT_PENDING.equals(session.getStatus())
                 || !Boolean.TRUE.equals(session.getStockReserved())
                 || !Objects.equals(session.getRazorpayOrderId(), before.getRazorpayOrderId())
+                || session.getTotalAmount() == null
+                || before.getTotalAmount() == null
                 || session.getTotalAmount().compareTo(before.getTotalAmount()) != 0
+                || !Objects.equals(session.getDeliveryCharge(), before.getDeliveryCharge())
                 || !Objects.equals(session.getCurrency(), before.getCurrency())) {
             throw conflict("Checkout changed during payment reconciliation. Check payment status again.");
         }
@@ -172,11 +175,40 @@ public class CheckoutSwitchToCodService {
         List<CheckoutSessionItem> snapshots = sessionItems.findBySession_IdOrderByIdAsc(session.getId());
         if (snapshots.isEmpty()) throw conflict("Checkout session is empty");
 
-        BigDecimal recalculated = snapshots.stream()
-                .map(CheckoutSessionItem::getLineTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (recalculated.compareTo(session.getSubtotal()) != 0
-                || session.getTotalAmount().compareTo(session.getSubtotal()) != 0) {
+        BigDecimal recalculated = BigDecimal.ZERO;
+        BigDecimal additionalTax = BigDecimal.ZERO;
+        BigDecimal totalTax = BigDecimal.ZERO.setScale(2);
+        boolean legacy = snapshots.stream().allMatch(item ->
+                item.getTaxAmount() == null
+                        && item.getGstRate() == null
+                        && item.getPriceIncludesGst() == null);
+
+        for (CheckoutSessionItem item : snapshots) {
+            if (item.getLineTotal() == null || item.getLineTotal().signum() < 0) {
+                throw conflict("Invalid checkout item amount");
+            }
+            recalculated = recalculated.add(item.getLineTotal());
+            if (legacy) continue;
+            if (item.getTaxAmount() == null || item.getGstRate() == null
+                    || item.getPriceIncludesGst() == null
+                    || item.getTaxAmount().signum() < 0
+                    || item.getGstRate().signum() < 0
+                    || item.getGstRate().compareTo(new BigDecimal("100")) > 0) {
+                throw conflict("Incomplete GST checkout snapshot; COD conversion blocked");
+            }
+            totalTax = totalTax.add(item.getTaxAmount());
+            if (!item.getPriceIncludesGst()) {
+                additionalTax = additionalTax.add(item.getTaxAmount());
+            }
+        }
+
+        BigDecimal deliveryCharge = session.getDeliveryCharge();
+        if (session.getSubtotal() == null || session.getTotalAmount() == null
+                || deliveryCharge == null || deliveryCharge.signum() < 0
+                || recalculated.compareTo(session.getSubtotal()) != 0
+                || session.getSubtotal().signum() <= 0
+                || session.getTotalAmount().compareTo(
+                session.getSubtotal().add(deliveryCharge).add(additionalTax)) != 0) {
             throw conflict("Checkout snapshot total mismatch");
         }
         validateShipping(session);
@@ -191,9 +223,9 @@ public class CheckoutSwitchToCodService {
         order.setStockState(StockState.RESERVED);
         order.setCurrency(session.getCurrency());
         order.setSubtotal(session.getSubtotal());
-        order.setDeliveryCharge(BigDecimal.ZERO.setScale(2));
+        order.setDeliveryCharge(deliveryCharge);
         order.setDiscountAmount(BigDecimal.ZERO.setScale(2));
-        order.setTaxAmount(BigDecimal.ZERO.setScale(2));
+        order.setTaxAmount(totalTax);
 
         BigDecimal codCharge = session.getSubtotal()
                 .multiply(new BigDecimal("0.05"))
