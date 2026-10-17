@@ -1,4 +1,5 @@
-package com.shreekrishna.organics.order.service;
+
+        package com.shreekrishna.organics.order.service;
 
 import com.shreekrishna.organics.order.entity.Order;
 import com.shreekrishna.organics.order.entity.OrderItem;
@@ -656,6 +657,15 @@ public class OrderConfirmationPdfService {
                     PAGE_H - 98,
                     8,
                     regular,
+                    WHITE
+            );
+
+            text(
+                    "GST Reg. No.: " + GSTIN,
+                    MARGIN,
+                    PAGE_H - 114,
+                    8,
+                    bold,
                     WHITE
             );
 
@@ -1487,8 +1497,8 @@ public class OrderConfirmationPdfService {
 
             String productLabel =
                     tax.gstIncludedInSubtotal()
-                            ? "Product value (excluding GST)"
-                            : "Product value before GST";
+                            ? "Product Price (Excluding GST)"
+                            : "Product Price (Excluding GST)";
 
             totalLine(
                     productLabel,
@@ -1509,7 +1519,7 @@ public class OrderConfirmationPdfService {
                                 rate(
                                         tax.cgstRate()
                                 ) +
-                                "%)",
+                                "%)" + (tax.gstIncludedInSubtotal() ? " - Included" : " - Added"),
                         money(
                                 tax.cgstAmount()
                         ),
@@ -1522,7 +1532,7 @@ public class OrderConfirmationPdfService {
                                 rate(
                                         tax.sgstRate()
                                 ) +
-                                "%)",
+                                "%)" + (tax.gstIncludedInSubtotal() ? " - Included" : " - Added"),
                         money(
                                 tax.sgstAmount()
                         ),
@@ -1539,7 +1549,7 @@ public class OrderConfirmationPdfService {
                                 rate(
                                         tax.igstRate()
                                 ) +
-                                "%)",
+                                "%)" + (tax.gstIncludedInSubtotal() ? " - Included" : " - Added"),
                         money(
                                 tax.igstAmount()
                         ),
@@ -1559,8 +1569,8 @@ public class OrderConfirmationPdfService {
 
             totalLine(
                     tax.gstIncludedInSubtotal()
-                            ? "Product price (including GST)"
-                            : "Product subtotal",
+                            ? "Product Price (Including GST)"
+                            : "Product Price (Excluding GST)",
                     money(
                             order.getSubtotal()
                     ),
@@ -1569,7 +1579,7 @@ public class OrderConfirmationPdfService {
             );
 
             totalLine(
-                    "Delivery charge",
+                    "Delivery Charge",
                     money(
                             order.getDeliveryCharge()
                     ),
@@ -1584,7 +1594,7 @@ public class OrderConfirmationPdfService {
             ) {
 
                 totalLine(
-                        "COD charge",
+                        "COD Charge",
                         money(
                                 order.getCodCharge()
                         ),
@@ -1726,14 +1736,12 @@ public class OrderConfirmationPdfService {
                             == PaymentStatus.PAID
             ) {
 
-                return "GST amounts are included in the product pricing " +
-                        "where applicable. This document serves as an order " +
-                        "and payment record for your purchase.";
+                return "GST is shown as included or added according to the order. " +
+                        "This document records your order and payment.";
             }
 
-            return "GST amounts are included in the product pricing " +
-                    "where applicable. This document serves as an order " +
-                    "record for your purchase.";
+            return "GST is shown as included or added according to the order. " +
+                    "This document records your order.";
         }
 
         private float closingNoteRequiredHeight(
