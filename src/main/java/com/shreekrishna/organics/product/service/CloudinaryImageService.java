@@ -3,6 +3,7 @@ package com.shreekrishna.organics.product.service;
 
 import com.cloudinary.Cloudinary;
 import com.cloudinary.utils.ObjectUtils;
+
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -49,6 +50,20 @@ public class CloudinaryImageService {
         return uploadToFolder(
                 file,
                 "shreekrishna/testimonials"
+        );
+    }
+
+    // ==========================================
+    // BLOG IMAGE UPLOAD - NEW
+    // ==========================================
+
+    public Map<String, Object> uploadBlogImage(
+            MultipartFile file
+    ) throws IOException {
+
+        return uploadToFolder(
+                file,
+                "shreekrishna/blogs"
         );
     }
 

@@ -71,6 +71,13 @@ public class OrderConfirmationPdfService {
         OrderTaxView.Breakdown tax =
                 OrderTaxView.from(order);
 
+        System.out.println("========== INVOICE SERVICE DEBUG ==========");
+        System.out.println("Order ID: " + orderId);
+        System.out.println("Order Number: " + order.getOrderNumber());
+        System.out.println("Payment Status: " + order.getPaymentStatus());
+        System.out.println("Order Items Count: " + orderItems.size());
+        System.out.println("Starting PDF generation...");
+
         try (
                 PDDocument document = new PDDocument();
                 ByteArrayOutputStream output =
@@ -80,19 +87,29 @@ public class OrderConfirmationPdfService {
             Layout pdf = new Layout(document);
 
             try {
+                System.out.println("Drawing header...");
                 pdf.drawHeader(order);
+                System.out.println("Drawing supplier...");
                 pdf.drawSupplier();
+                System.out.println("Drawing customer...");
                 pdf.drawCustomer(order);
+                System.out.println("Drawing items...");
                 pdf.drawItems(orderItems);
+                System.out.println("Drawing totals...");
                 pdf.drawTotals(order, tax);
+                System.out.println("Drawing closing note...");
                 pdf.drawClosingNote(order);
+                System.out.println("PDF content completed.");
             } finally {
                 pdf.close();
             }
 
+            System.out.println("Drawing page footers...");
             pdf.drawPageFooters();
 
+            System.out.println("Saving PDF...");
             document.save(output);
+            System.out.println("PDF saved. Bytes: " + output.size());
 
             String safeOrderNumber =
                     order.getOrderNumber() == null
@@ -110,7 +127,12 @@ public class OrderConfirmationPdfService {
                             ".pdf"
             );
 
-        } catch (IOException ex) {
+        } catch (IOException | RuntimeException ex) {
+            System.err.println("========== INVOICE SERVICE ERROR ==========");
+            System.err.println("Order ID: " + orderId);
+            System.err.println("Error Type: " + ex.getClass().getName());
+            System.err.println("Error Message: " + ex.getMessage());
+            ex.printStackTrace();
 
             throw new ResponseStatusException(
                     HttpStatus.INTERNAL_SERVER_ERROR,

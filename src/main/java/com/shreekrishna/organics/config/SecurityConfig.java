@@ -74,6 +74,7 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // Admin APIs - ADMIN role required
+                        // Includes /api/v1/admin/blogs/**
                         .requestMatchers(
                                 "/api/v1/admin/**"
                         ).hasRole("ADMIN")
@@ -84,10 +85,17 @@ public class SecurityConfig {
                                 "/api/v1/testimonials"
                         ).permitAll()
 
-                        // NEW: Public YouTube Videos
+                        // Public YouTube Videos
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/videos"
+                        ).permitAll()
+
+                        // NEW: Public Published Blogs
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/blogs",
+                                "/api/v1/blogs/**"
                         ).permitAll()
 
                         // Public Customer Reviews
