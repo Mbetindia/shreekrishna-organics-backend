@@ -175,9 +175,11 @@ public class SecurityConfig {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
+        // Allow local development and deployed Vercel frontend
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5173",
-                "http://127.0.0.1:5173"
+                "http://127.0.0.1:5173",
+                "https://shree-krishna-organics-frontend.vercel.app"
         ));
 
         configuration.setAllowedMethods(List.of(
@@ -195,9 +197,10 @@ public class SecurityConfig {
                 "Accept"
         ));
 
-        configuration.setExposedHeaders(
-                List.of("Content-Disposition")
-        );
+        // Required for frontend invoice PDF downloads
+        configuration.setExposedHeaders(List.of(
+                "Content-Disposition"
+        ));
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
