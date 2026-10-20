@@ -1,3 +1,4 @@
+
 package com.shreekrishna.organics.user.entity;
 
 import jakarta.persistence.*;
@@ -24,29 +25,39 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "first_name", nullable = false, length = 100)
+    // Optional for mobile OTP customers
+    @Column(name = "first_name", length = 100)
     private String firstName;
 
-    @Column(name = "last_name", nullable = false, length = 100)
+    @Column(name = "last_name", length = 100)
     private String lastName;
 
-    @Column(nullable = false, unique = true, length = 255)
+    // Optional for mobile OTP customers
+    @Column(unique = true, length = 255)
     private String email;
 
+    // Customer login identifier
     @Column(unique = true, length = 20)
     private String mobile;
 
-    @Column(nullable = false, length = 255)
+    // Optional for mobile OTP customers
+    @Column(length = 255)
     private String password;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private Role role = Role.CUSTOMER;
 
+    @Builder.Default
     @Column(nullable = false)
     private boolean enabled = true;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(
+            name = "created_at",
+            nullable = false,
+            updatable = false
+    )
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)

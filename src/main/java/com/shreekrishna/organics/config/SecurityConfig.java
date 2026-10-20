@@ -64,7 +64,11 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/health",
                                 "/api/v1/auth/register",
-                                "/api/v1/auth/login"
+                                "/api/v1/auth/login",
+
+                                // MSG91 Customer Mobile OTP
+                                "/api/v1/auth/otp/send",
+                                "/api/v1/auth/otp/verify"
                         ).permitAll()
 
                         // Razorpay webhook
@@ -74,7 +78,6 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // Admin APIs - ADMIN role required
-                        // Includes /api/v1/admin/blogs/**
                         .requestMatchers(
                                 "/api/v1/admin/**"
                         ).hasRole("ADMIN")
@@ -91,7 +94,7 @@ public class SecurityConfig {
                                 "/api/v1/videos"
                         ).permitAll()
 
-                        // NEW: Public Published Blogs
+                        // Public Published Blogs
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/blogs",
@@ -175,7 +178,7 @@ public class SecurityConfig {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Allow local development and deployed Vercel frontend
+        // Local development and deployed Vercel frontend
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",

@@ -3,6 +3,7 @@ package com.shreekrishna.organics.checkout.service;
 import com.shreekrishna.organics.checkout.dto.CheckoutReconciliationPreview;
 import com.shreekrishna.organics.checkout.entity.CheckoutSession;
 import com.shreekrishna.organics.checkout.repository.CheckoutSessionRepository;
+import com.shreekrishna.organics.user.entity.User;
 import com.shreekrishna.organics.user.repository.UserRepository;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -19,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Locale;
 
 /**
  * STAGE 3D-B DIAGNOSTIC ONLY. Does NOT cancel, expire, finalize, mutate inventory,
@@ -44,10 +46,8 @@ public class CheckoutReconciliationPreviewService {
         this.keySecret = keySecret;
     }
 
-    public CheckoutReconciliationPreview inspect(String email, String sessionId) {
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"))
-                .getId();
+    public CheckoutReconciliationPreview inspect(String identifier, String sessionId) {
+        Long userId = findCustomer(identifier).getId();
         CheckoutSession session = sessions.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checkout session not found"));
         if ("FINALIZED".equals(session.getStatus()) && session.getFinalizedOrderId() != null) {
@@ -58,9 +58,10 @@ public class CheckoutReconciliationPreviewService {
             return result(session, "NO_PROVIDER_ORDER", 0, null,
                     "No Razorpay order linked. This is informational, not approval to create COD.");
         }
-        if (keyId.isBlank() || keySecret.isBlank()) {
+        if (keyId == null || keyId.isBlank() || keySecret == null || keySecret.isBlank()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Razorpay credentials unavailable");
         }
+
         // Razorpay Orders API: fetch the payments associated with an order.
         String encoded = URLEncoder.encode(session.getRazorpayOrderId(), StandardCharsets.UTF_8);
         URI url = URI.create("https://api.razorpay.com/v1/orders/" + encoded + "/payments?count=100&skip=0");
@@ -146,8 +147,21 @@ public class CheckoutReconciliationPreviewService {
                 "Snapshot only: a late capture remains possible. NOT clearance for cancellation, stock release or COD.");
     }
 
+    private User findCustomer(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        String value = identifier.trim();
+        if (value.contains("@")) {
+            return users.findByEmail(value.toLowerCase(Locale.ROOT))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+        }
+        return users.findByMobile(value)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+    }
+
     private CheckoutReconciliationPreview result(CheckoutSession s, String assessment,
-            int attempts, String capturedId, String guidance) {
+                                                 int attempts, String capturedId, String guidance) {
         return new CheckoutReconciliationPreview(s.getId(), s.getStatus(),
                 s.getRazorpayOrderId(), assessment, attempts,
                 capturedId, s.getFinalizedOrderId(), guidance);

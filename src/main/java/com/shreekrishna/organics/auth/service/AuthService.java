@@ -1,3 +1,4 @@
+
 package com.shreekrishna.organics.auth.service;
 
 import com.shreekrishna.organics.auth.dto.AuthResponse;
@@ -101,6 +102,7 @@ public class AuthService {
         // 1. User exists
         // 2. Password matches BCrypt hash
         // 3. User is enabled
+
         Authentication authentication =
                 authenticationManager.authenticate(
                         new UsernamePasswordAuthenticationToken(
@@ -137,7 +139,8 @@ public class AuthService {
                 user.getFirstName(),
                 user.getLastName(),
                 user.getEmail(),
-                user.getRole()
+                user.getRole(),
+                user.getMobile()
         );
     }
 

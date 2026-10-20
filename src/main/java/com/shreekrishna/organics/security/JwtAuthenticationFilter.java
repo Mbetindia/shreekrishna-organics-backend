@@ -1,3 +1,4 @@
+
 package com.shreekrishna.organics.security;
 
 import io.jsonwebtoken.JwtException;
@@ -5,9 +6,11 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -21,8 +24,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public JwtAuthenticationFilter(
             JwtService jwtService,
-            CustomUserDetailsService userDetailsService) {
-
+            CustomUserDetailsService userDetailsService
+    ) {
         this.jwtService = jwtService;
         this.userDetailsService = userDetailsService;
     }
@@ -31,8 +34,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
-            FilterChain filterChain)
-            throws ServletException, IOException {
+            FilterChain filterChain
+    ) throws ServletException, IOException {
 
         String authorizationHeader =
                 request.getHeader("Authorization");
@@ -47,15 +50,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authorizationHeader.substring(7);
 
         try {
+            // JWT subject can be email or mobile
+            String username = jwtService.extractUsername(token);
 
-            String email = jwtService.extractUsername(token);
-
-            if (email != null &&
+            if (username != null &&
                     SecurityContextHolder.getContext()
                             .getAuthentication() == null) {
 
                 UserDetails userDetails =
-                        userDetailsService.loadUserByUsername(email);
+                        userDetailsService.loadUserByUsername(username);
 
                 if (jwtService.isTokenValid(token, userDetails)) {
 
@@ -66,21 +69,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     userDetails.getAuthorities()
                             );
 
-                    SecurityContextHolder
-                            .getContext()
+                    SecurityContextHolder.getContext()
                             .setAuthentication(authentication);
                 }
             }
 
-        } catch (JwtException | IllegalArgumentException ignored) {
+        } catch (JwtException |
+                 IllegalArgumentException |
+                 UsernameNotFoundException ignored) {
 
-            /*
-             * Invalid/expired JWT.
-             *
-             * Do not authenticate the request.
-             * Spring Security will reject it if the endpoint
-             * requires authentication.
-             */
+            // Invalid, expired JWT or missing user.
+            // Protected endpoints will reject the request.
         }
 
         filterChain.doFilter(request, response);

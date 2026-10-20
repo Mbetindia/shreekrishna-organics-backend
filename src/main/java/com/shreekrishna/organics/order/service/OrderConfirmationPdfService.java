@@ -46,9 +46,20 @@ public class OrderConfirmationPdfService {
     }
 
     @Transactional(readOnly = true)
-    public GeneratedInvoice generate(String email, Long orderId) {
+    public GeneratedInvoice generate(String identifier, Long orderId) {
 
-        Long userId = users.findByEmail(email)
+        if (identifier == null || identifier.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Authenticated customer identifier is missing"
+            );
+        }
+
+        String customerIdentifier = identifier.trim();
+
+        Long userId = (customerIdentifier.contains("@")
+                ? users.findByEmail(customerIdentifier)
+                : users.findByMobile(customerIdentifier))
                 .orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,

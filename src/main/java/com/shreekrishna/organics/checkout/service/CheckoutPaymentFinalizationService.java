@@ -1,4 +1,5 @@
-package com.shreekrishna.organics.checkout.service;
+
+        package com.shreekrishna.organics.checkout.service;
 
 import com.razorpay.RazorpayException;
 import com.shreekrishna.organics.cart.entity.Cart;
@@ -68,8 +69,7 @@ public class CheckoutPaymentFinalizationService {
                 || blank(request.razorpayPaymentId()) || blank(request.razorpaySignature())) {
             throw problem(HttpStatus.BAD_REQUEST, "Missing Razorpay verification fields");
         }
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Customer not found")).getId();
+        Long userId = findCustomerId(email);
         CheckoutSession session = sessions.findOwnedForUpdate(sessionId, userId)
                 .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Checkout session not found"));
         if (!request.razorpayOrderId().equals(session.getRazorpayOrderId())) {
@@ -330,6 +330,23 @@ public class CheckoutPaymentFinalizationService {
             }
         }
         cartItems.flush();
+    }
+
+    // The caller must supply the authenticated principal (email or mobile),
+    // never an identifier supplied by the client request body.
+    private Long findCustomerId(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw problem(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        String value = identifier.trim();
+        if (value.contains("@")) {
+            return users.findByEmail(value.toLowerCase(Locale.ROOT))
+                    .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Customer not found"))
+                    .getId();
+        }
+        return users.findByMobile(value)
+                .orElseThrow(() -> problem(HttpStatus.NOT_FOUND, "Customer not found"))
+                .getId();
     }
 
     private boolean blank(String v) { return v == null || v.isBlank(); }

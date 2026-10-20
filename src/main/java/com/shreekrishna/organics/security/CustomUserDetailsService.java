@@ -1,7 +1,9 @@
+
 package com.shreekrishna.organics.security;
 
 import com.shreekrishna.organics.user.entity.User;
 import com.shreekrishna.organics.user.repository.UserRepository;
+
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -17,21 +19,51 @@ public class CustomUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String email)
+    public UserDetails loadUserByUsername(String username)
             throws UsernameNotFoundException {
 
-        String normalizedEmail = email.trim().toLowerCase();
+        if (username == null || username.isBlank()) {
+            throw new UsernameNotFoundException("Invalid user");
+        }
 
-        User user = userRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() ->
-                        new UsernameNotFoundException(
-                                "Invalid email or password"
-                        )
-                );
+        String normalizedUsername = username.trim().toLowerCase();
+
+        User user;
+
+        // Existing Admin and Email-based Login
+        if (normalizedUsername.contains("@")) {
+
+            user = userRepository.findByEmail(normalizedUsername)
+                    .orElseThrow(() ->
+                            new UsernameNotFoundException(
+                                    "Invalid email or password"
+                            )
+                    );
+
+        } else {
+
+            // Customer Mobile OTP Login
+            user = userRepository.findByMobile(normalizedUsername)
+                    .orElseThrow(() ->
+                            new UsernameNotFoundException(
+                                    "User not found"
+                            )
+                    );
+        }
+
+        // IMPORTANT:
+        // Use the same identifier that was used to load the user.
+        // Email JWT -> Email username
+        // Mobile JWT -> Mobile username
+        String loginIdentifier = normalizedUsername;
 
         return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
-                .password(user.getPassword())
+                .withUsername(loginIdentifier)
+                .password(
+                        user.getPassword() != null
+                                ? user.getPassword()
+                                : ""
+                )
                 .roles(user.getRole().name())
                 .disabled(!user.isEnabled())
                 .build();

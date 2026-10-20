@@ -1,4 +1,3 @@
-
 package com.shreekrishna.organics.checkout.service;
 
 import com.shreekrishna.organics.address.repository.AddressRepository;
@@ -72,11 +71,9 @@ public class CheckoutDraftService {
     }
 
     @Transactional
-    public CheckoutDraftResponse create(String email, Long addressId) {
+    public CheckoutDraftResponse create(String username, Long addressId) {
 
-        User user = users.findByEmail(email)
-                .orElseThrow(() ->
-                        error(HttpStatus.NOT_FOUND, "Customer not found"));
+        User user = findAuthenticatedCustomer(username);
 
         // Same user-level lock as CustomerOrderService and CartService.
         em.lock(user, LockModeType.PESSIMISTIC_WRITE);
@@ -261,11 +258,9 @@ public class CheckoutDraftService {
     }
 
     @Transactional(readOnly = true)
-    public CheckoutDraftResponse get(String email, String sessionId) {
+    public CheckoutDraftResponse get(String username, String sessionId) {
 
-        User user = users.findByEmail(email)
-                .orElseThrow(() ->
-                        error(HttpStatus.NOT_FOUND, "Customer not found"));
+        User user = findAuthenticatedCustomer(username);
 
         CheckoutSession session = sessions
                 .findByIdAndUserId(sessionId, user.getId())
@@ -276,6 +271,21 @@ public class CheckoutDraftService {
                 session,
                 sessionItems.findBySession_IdOrderByIdAsc(sessionId)
         );
+    }
+
+    private User findAuthenticatedCustomer(String username) {
+        if (username == null || username.isBlank()) {
+            throw error(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
+        String identity = username.trim();
+        return (identity.contains("@")
+                ? users.findByEmail(identity.toLowerCase(java.util.Locale.ROOT))
+                : users.findByMobile(identity))
+                .filter(user -> user.isEnabled()
+                        && user.getRole() != null && "CUSTOMER".equals(user.getRole().name()))
+                .orElseThrow(() ->
+                        error(HttpStatus.NOT_FOUND, "Customer not found"));
     }
 
     private CheckoutDraftResponse response(

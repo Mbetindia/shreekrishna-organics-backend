@@ -1,4 +1,5 @@
 
+
         package com.shreekrishna.organics.order.service;
 
 import com.shreekrishna.organics.address.entity.Address;
@@ -43,7 +44,7 @@ public class CustomerOrderService {
     private final OrderRepository orders;
     private final OrderItemRepository orderItems;
     private final EntityManager em;
-      private final PaymentRepository paymentRepository;
+    private final PaymentRepository paymentRepository;
     private final CheckoutSessionRepository checkoutSessions;
     private final VariantDeliveryPricingService deliveryPricingService;
 
@@ -340,8 +341,19 @@ public class CustomerOrderService {
         }
     }
 
-    private User currentUser(String email) {
-        return users.findByEmail(email).orElseThrow(() -> notFound("Authenticated user not found"));
+    private User currentUser(String username) {
+        if (username == null || username.isBlank()) {
+            throw notFound("Authenticated user not found");
+        }
+
+        String identifier = username.trim();
+        if (identifier.contains("@")) {
+            return users.findByEmail(identifier.toLowerCase(Locale.ROOT))
+                    .orElseThrow(() -> notFound("Authenticated user not found"));
+        }
+
+        return users.findByMobile(identifier)
+                .orElseThrow(() -> notFound("Authenticated user not found"));
     }
 
     private static BigDecimal zero() { return BigDecimal.ZERO.setScale(2); }

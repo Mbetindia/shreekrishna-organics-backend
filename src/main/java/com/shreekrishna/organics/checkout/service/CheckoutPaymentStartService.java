@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Stage 5B: persist a durable initiation marker BEFORE calling Razorpay.
@@ -43,10 +44,10 @@ public class CheckoutPaymentStartService {
     private final boolean enabled;
 
     public CheckoutPaymentStartService(CheckoutSessionRepository sessions,
-            CheckoutSessionItemRepository items, UserRepository users,
-            EntityManager em, InventoryService inventory, RazorpayService razorpay,
-            TransactionTemplate transactions,
-            @Value("${checkout.online-payments-enabled:false}") boolean enabled) {
+                                       CheckoutSessionItemRepository items, UserRepository users,
+                                       EntityManager em, InventoryService inventory, RazorpayService razorpay,
+                                       TransactionTemplate transactions,
+                                       @Value("${checkout.online-payments-enabled:false}") boolean enabled) {
         this.sessions = sessions;
         this.items = items;
         this.users = users;
@@ -57,7 +58,7 @@ public class CheckoutPaymentStartService {
         this.enabled = enabled;
     }
 
-    public CheckoutPaymentResponse start(String email, String sessionId) throws RazorpayException {
+    public CheckoutPaymentResponse start(String identifier, String sessionId) throws RazorpayException {
         if (!enabled) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "New checkout-session payments are disabled until finalization and recovery tests pass");
@@ -65,12 +66,12 @@ public class CheckoutPaymentStartService {
 
         // First transaction commits stock reservations and a durable marker.
         // No external HTTP calls are made while locks are held.
-        Preparation preparation = transactions.execute(status -> prepare(email, sessionId));
+        Preparation preparation = transactions.execute(status -> prepare(identifier, sessionId));
         if (preparation == null) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Payment preparation failed");
         }
         if (preparation.reuse()) {
-            return getStatus(email, sessionId);
+            return getStatus(identifier, sessionId);
         }
 
         // Razorpay is called OUTSIDE the database transaction.
@@ -108,9 +109,8 @@ public class CheckoutPaymentStartService {
         return result;
     }
 
-    private Preparation prepare(String email, String sessionId) {
-        User user = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+    private Preparation prepare(String identifier, String sessionId) {
+        User user = findCustomer(identifier);
         em.lock(user, LockModeType.PESSIMISTIC_WRITE);
         Long userId = user.getId();
         CheckoutSession session = sessions.findOwnedForUpdate(sessionId, userId)
@@ -159,18 +159,35 @@ public class CheckoutPaymentStartService {
         return new Preparation(sessionId, userId, session.getTotalAmount(), false);
     }
 
-    public CheckoutPaymentResponse status(String email, String sessionId) {
-        return getStatus(email, sessionId);
+    public CheckoutPaymentResponse status(String identifier, String sessionId) {
+        return getStatus(identifier, sessionId);
     }
 
-    private CheckoutPaymentResponse getStatus(String email, String sessionId) {
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Customer not found")).getId();
+    private CheckoutPaymentResponse getStatus(String identifier, String sessionId) {
+        Long userId = findCustomer(identifier).getId();
         CheckoutSession session = sessions.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Checkout session not found"));
         return response(session);
+    }
+
+    // Resolve the authenticated JWT principal by email OR mobile number.
+    // Never trust a client-provided identifier in place of the authenticated principal.
+    private User findCustomer(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
+        String value = identifier.trim();
+        if (value.contains("@")) {
+            return users.findByEmail(value.toLowerCase(Locale.ROOT))
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Customer not found"));
+        }
+
+        return users.findByMobile(value)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Customer not found"));
     }
 
     private CheckoutPaymentResponse response(CheckoutSession session) {

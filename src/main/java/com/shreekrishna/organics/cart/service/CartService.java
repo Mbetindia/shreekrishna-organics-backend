@@ -1,4 +1,5 @@
-package com.shreekrishna.organics.cart.service;
+
+        package com.shreekrishna.organics.cart.service;
 
 import com.shreekrishna.organics.cart.dto.*;
 import com.shreekrishna.organics.cart.entity.Cart;
@@ -51,8 +52,8 @@ public class CartService {
         this.entityManager = entityManager;
     }
 
-    public CartResponse getCart(String email) {
-        Long userId = getUserId(email);
+    public CartResponse getCart(String username) {
+        Long userId = getUserId(username);
 
         return cartRepository.findByUserId(userId)
                 .map(this::buildResponse)
@@ -60,10 +61,10 @@ public class CartService {
     }
 
     public CartResponse addItem(
-            String email,
+            String username,
             AddCartItemRequest request
     ) {
-        Long userId = lockUserAndGetId(email);
+        Long userId = lockUserAndGetId(username);
 
         ProductVariant variant = getPurchasableVariant(
                 request.variantId()
@@ -106,11 +107,11 @@ public class CartService {
     }
 
     public CartResponse updateItem(
-            String email,
+            String username,
             Long itemId,
             UpdateCartItemRequest request
     ) {
-        Long userId = lockUserAndGetId(email);
+        Long userId = lockUserAndGetId(username);
         Cart cart = getExistingCart(userId);
 
         CartItem item = cartItemRepository
@@ -133,10 +134,10 @@ public class CartService {
     }
 
     public CartResponse removeItem(
-            String email,
+            String username,
             Long itemId
     ) {
-        Long userId = lockUserAndGetId(email);
+        Long userId = lockUserAndGetId(username);
         Cart cart = getExistingCart(userId);
 
         CartItem item = cartItemRepository
@@ -151,8 +152,8 @@ public class CartService {
         return buildResponse(cart);
     }
 
-    public CartResponse clearCart(String email) {
-        Long userId = lockUserAndGetId(email);
+    public CartResponse clearCart(String username) {
+        Long userId = lockUserAndGetId(username);
 
         Cart cart = cartRepository
                 .findByUserIdForUpdate(userId)
@@ -168,19 +169,26 @@ public class CartService {
         return buildResponse(cart);
     }
 
-    private Long getUserId(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> notFound(
-                        "Authenticated user not found"
-                ))
-                .getId();
+    // JWT subject is an email for legacy accounts or a mobile for OTP accounts.
+    // Never accept an arbitrary user ID from the request.
+    private com.shreekrishna.organics.user.entity.User findAuthenticatedUser(String username) {
+        if (username == null || username.isBlank()) {
+            throw notFound("Authenticated user not found");
+        }
+
+        String identifier = username.trim();
+        return (identifier.contains("@")
+                ? userRepository.findByEmail(identifier.toLowerCase(java.util.Locale.ROOT))
+                : userRepository.findByMobile(identifier))
+                .orElseThrow(() -> notFound("Authenticated user not found"));
     }
 
-    private Long lockUserAndGetId(String email) {
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> notFound(
-                        "Authenticated user not found"
-                ));
+    private Long getUserId(String username) {
+        return findAuthenticatedUser(username).getId();
+    }
+
+    private Long lockUserAndGetId(String username) {
+        var user = findAuthenticatedUser(username);
 
         // Serialize cart mutations for the same customer.
         // This also protects the initial cart creation.

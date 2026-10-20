@@ -1,4 +1,5 @@
-package com.shreekrishna.organics.checkout.service;
+
+        package com.shreekrishna.organics.checkout.service;
 
 import com.shreekrishna.organics.checkout.dto.CheckoutProviderRecoveryResponse;
 import com.shreekrishna.organics.checkout.entity.CheckoutSession;
@@ -25,6 +26,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Stage 5C: recover the Razorpay order association after PAYMENT_INITIATING.
@@ -48,9 +50,9 @@ public class CheckoutProviderRecoveryService {
             .connectTimeout(Duration.ofSeconds(5)).build();
 
     public CheckoutProviderRecoveryService(CheckoutSessionRepository sessions,
-            UserRepository users, EntityManager em, TransactionTemplate transactions,
-            @Value("${razorpay.key.id}") String keyId,
-            @Value("${razorpay.key.secret}") String keySecret) {
+                                           UserRepository users, EntityManager em, TransactionTemplate transactions,
+                                           @Value("${razorpay.key.id}") String keyId,
+                                           @Value("${razorpay.key.secret}") String keySecret) {
         this.sessions = sessions;
         this.users = users;
         this.em = em;
@@ -94,8 +96,7 @@ public class CheckoutProviderRecoveryService {
             throw conflict("Unknown provider order state; manual reconciliation required");
         }
         return transactions.execute(tx -> {
-            User user = users.findByEmail(email)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+            User user = findCustomer(email);
             em.lock(user, LockModeType.PESSIMISTIC_WRITE);
             CheckoutSession current = sessions.findOwnedForUpdate(sessionId, user.getId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checkout not found"));
@@ -122,9 +123,22 @@ public class CheckoutProviderRecoveryService {
         });
     }
 
+    /** Resolve the authenticated principal using email or MSG91 mobile. */
+    private User findCustomer(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+        String value = identifier.trim();
+        if (value.contains("@")) {
+            return users.findByEmail(value.toLowerCase(Locale.ROOT))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+        }
+        return users.findByMobile(value)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+    }
+
     private CheckoutSession owned(String email, String id) {
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"))
+        Long userId = findCustomer(email)
                 .getId();
         return sessions.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checkout not found"));
@@ -225,7 +239,7 @@ public class CheckoutProviderRecoveryService {
     }
 
     private CheckoutProviderRecoveryResponse response(CheckoutSession s, String assessment,
-            String providerId, int matchCount, String message) {
+                                                      String providerId, int matchCount, String message) {
         return new CheckoutProviderRecoveryResponse(s.getId(), s.getStatus(), assessment,
                 providerId, matchCount, message);
     }
