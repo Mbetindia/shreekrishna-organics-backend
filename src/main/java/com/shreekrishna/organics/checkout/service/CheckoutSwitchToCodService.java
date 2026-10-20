@@ -62,6 +62,7 @@ public class CheckoutSwitchToCodService {
     private final CartRepository carts;
     private final CartItemRepository cartItems;
     private final CheckoutPaymentFinalizationService finalizer;
+    private final com.shreekrishna.organics.inventory.service.InventoryService inventoryService;
     private final EntityManager em;
     private final TransactionTemplate transactions;
     private final String keyId;
@@ -79,6 +80,7 @@ public class CheckoutSwitchToCodService {
             CartRepository carts,
             CartItemRepository cartItems,
             CheckoutPaymentFinalizationService finalizer,
+            com.shreekrishna.organics.inventory.service.InventoryService inventoryService,
             EntityManager em,
             TransactionTemplate transactions,
             @Value("${razorpay.key.id}") String keyId,
@@ -91,6 +93,7 @@ public class CheckoutSwitchToCodService {
         this.carts = carts;
         this.cartItems = cartItems;
         this.finalizer = finalizer;
+        this.inventoryService = inventoryService;
         this.em = em;
         this.transactions = transactions;
         this.keyId = keyId;
@@ -145,9 +148,26 @@ public class CheckoutSwitchToCodService {
         return result;
     }
 
+    /** Direct COD checkout from a CREATED Buy Now draft; no Razorpay order exists. */
+    public CheckoutSwitchToCodResponse placeBuyNowCod(String identity, String sessionId) {
+        CheckoutSession before = owned(identity, sessionId);
+        if (!"BUY_NOW".equals(before.getCheckoutSource())) {
+            throw conflict("Direct session COD is available only for Buy Now");
+        }
+        CheckoutSwitchToCodResponse result = transactions.execute(tx ->
+                createCodOrder(identity, sessionId, before, true));
+        if (result == null) throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Unable to create COD order");
+        return result;
+    }
+
     private CheckoutSwitchToCodResponse createCodOrder(String email, String sessionId, CheckoutSession before) {
-        User user = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+        return createCodOrder(email, sessionId, before, false);
+    }
+
+    private CheckoutSwitchToCodResponse createCodOrder(String email, String sessionId,
+                                                        CheckoutSession before, boolean directBuyNow) {
+        User user = findAuthenticatedCustomer(email);
         em.lock(user, LockModeType.PESSIMISTIC_WRITE);
 
         CheckoutSession session = sessions.findOwnedForUpdate(sessionId, user.getId())
@@ -161,8 +181,17 @@ public class CheckoutSwitchToCodService {
             return response(session, "ONLINE_ALREADY_FINALIZED", session.getFinalizedOrderId(), false,
                     "Online payment was finalized while COD conversion was being processed.");
         }
-        if (!PAYMENT_PENDING.equals(session.getStatus())
-                || !Boolean.TRUE.equals(session.getStockReserved())
+        if (!(directBuyNow
+                ? "CREATED".equals(session.getStatus())
+                    && "BUY_NOW".equals(session.getCheckoutSource())
+                    && !Boolean.TRUE.equals(session.getStockReserved())
+                    && session.getRazorpayOrderId() == null
+                    && session.getRazorpayPaymentId() == null
+                    && session.getFinalizedOrderId() == null
+                    && session.getExpiresAt() != null
+                    && session.getExpiresAt().isAfter(java.time.LocalDateTime.now())
+                : PAYMENT_PENDING.equals(session.getStatus())
+                    && Boolean.TRUE.equals(session.getStockReserved()))
                 || !Objects.equals(session.getRazorpayOrderId(), before.getRazorpayOrderId())
                 || session.getTotalAmount() == null
                 || before.getTotalAmount() == null
@@ -212,6 +241,14 @@ public class CheckoutSwitchToCodService {
             throw conflict("Checkout snapshot total mismatch");
         }
         validateShipping(session);
+
+        if (directBuyNow) {
+            // Reserve stock in this same DB transaction before transferring to the COD order.
+            snapshots.stream()
+                    .sorted(Comparator.comparing(CheckoutSessionItem::getVariantId))
+                    .forEach(item -> inventoryService.reserveStock(item.getVariantId(), item.getQuantity()));
+            session.setStockReserved(true);
+        }
 
         Order order = new Order();
         order.setOrderNumber("SKO-" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT));
@@ -268,7 +305,9 @@ public class CheckoutSwitchToCodService {
         session.setStatus(COD_FINALIZED);
         sessions.saveAndFlush(session);
 
-        removePurchasedItemsFromCart(session.getUserId(), snapshots);
+        if (!"BUY_NOW".equals(session.getCheckoutSource())) {
+            removePurchasedItemsFromCart(session.getUserId(), snapshots);
+        }
 
         return response(session, "COD_ORDER_CREATED", order.getId(), true,
                 "Online checkout was converted to Cash on Delivery. The same reserved stock and checkout snapshot were used.");
@@ -381,10 +420,27 @@ public class CheckoutSwitchToCodService {
         return new ProviderScan(captures, capturedId, uncertain);
     }
 
+    /**
+     * Resolve the authenticated principal for both legacy email and mobile-OTP customers.
+     * Keep the same enabled CUSTOMER-only rule used by CheckoutDraftService.
+     */
+    private User findAuthenticatedCustomer(String identity) {
+        if (identity == null || identity.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
+        String principal = identity.trim();
+        return (principal.contains("@")
+                ? users.findByEmail(principal.toLowerCase(Locale.ROOT))
+                : users.findByMobile(principal))
+                .filter(user -> user.isEnabled()
+                        && user.getRole() != null
+                        && "CUSTOMER".equals(user.getRole().name()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+    }
+
     private CheckoutSession owned(String email, String sessionId) {
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"))
-                .getId();
+        Long userId = findAuthenticatedCustomer(email).getId();
         return sessions.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Checkout session not found"));
     }

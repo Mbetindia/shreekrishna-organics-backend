@@ -20,6 +20,9 @@ public class CheckoutSession {
     @Column(length = 36)
     private String id;
 
+    @Column(name = "checkout_source", nullable = false, length = 16)
+    private String checkoutSource = "CART";
+
     @Column(name = "user_id", nullable = false)
     private Long userId;
 

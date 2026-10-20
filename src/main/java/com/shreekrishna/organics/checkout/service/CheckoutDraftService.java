@@ -72,7 +72,21 @@ public class CheckoutDraftService {
 
     @Transactional
     public CheckoutDraftResponse create(String username, Long addressId) {
+        return createInternal(username, addressId, null, null);
+    }
 
+    /** Buy Now is based on exactly one selected variant, never on the cart. */
+    @Transactional
+    public CheckoutDraftResponse createBuyNow(String username, Long addressId,
+                                              Long variantId, Integer quantity) {
+        if (variantId == null || quantity == null || quantity <= 0 || quantity > 100) {
+            throw error(HttpStatus.BAD_REQUEST, "Invalid Buy Now variant or quantity");
+        }
+        return createInternal(username, addressId, variantId, quantity);
+    }
+
+    private CheckoutDraftResponse createInternal(String username, Long addressId,
+                                                   Long buyNowVariantId, Integer buyNowQuantity) {
         User user = findAuthenticatedCustomer(username);
 
         // Same user-level lock as CustomerOrderService and CartService.
@@ -95,21 +109,25 @@ public class CheckoutDraftService {
                 .orElseThrow(() ->
                         error(HttpStatus.NOT_FOUND, "Shipping address not found"));
 
-        Cart cart = carts.findByUserIdForUpdate(user.getId())
-                .orElseThrow(() ->
-                        error(HttpStatus.CONFLICT, "Cart is empty"));
-
-        List<CartItem> selected =
-                cartItems.findByCartIdOrderByIdAsc(cart.getId());
-
-        if (selected.isEmpty()) {
-            throw error(HttpStatus.CONFLICT, "Cart is empty");
+        List<CartItem> selected;
+        if (buyNowVariantId == null) {
+            Cart cart = carts.findByUserIdForUpdate(user.getId())
+                    .orElseThrow(() -> error(HttpStatus.CONFLICT, "Cart is empty"));
+            selected = cartItems.findByCartIdOrderByIdAsc(cart.getId());
+            if (selected.isEmpty()) throw error(HttpStatus.CONFLICT, "Cart is empty");
+        } else {
+            // Do not read, update, or clear the customer's existing cart.
+            CartItem single = new CartItem();
+            single.setVariantId(buyNowVariantId);
+            single.setQuantity(buyNowQuantity);
+            selected = List.of(single);
         }
 
         CheckoutSession session = new CheckoutSession();
 
         session.setId(UUID.randomUUID().toString());
         session.setUserId(user.getId());
+        session.setCheckoutSource(buyNowVariantId == null ? "CART" : "BUY_NOW");
         session.setAddressId(addressId);
 
         // Immutable shipping address snapshot.
