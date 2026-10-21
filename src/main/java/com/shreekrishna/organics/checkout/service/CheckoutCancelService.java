@@ -188,9 +188,7 @@ public class CheckoutCancelService {
             CheckoutSession before,
             boolean releaseReservation) {
 
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"))
-                .getId();
+        Long userId = findAuthenticatedCustomer(email).getId();
 
         CheckoutSession session = sessions.findOwnedForUpdate(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -337,10 +335,27 @@ public class CheckoutCancelService {
         return new ProviderScan(captures, capturedId, uncertain);
     }
 
+    /**
+     * Resolve the authenticated principal for both legacy email and mobile-OTP customers.
+     * Keep the same enabled CUSTOMER-only rule used by CheckoutDraftService.
+     */
+    private com.shreekrishna.organics.user.entity.User findAuthenticatedCustomer(String identity) {
+        if (identity == null || identity.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
+        String principal = identity.trim();
+        return (principal.contains("@")
+                ? users.findByEmail(principal.toLowerCase(java.util.Locale.ROOT))
+                : users.findByMobile(principal))
+                .filter(user -> user.isEnabled()
+                        && user.getRole() != null
+                        && "CUSTOMER".equals(user.getRole().name()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"));
+    }
+
     private CheckoutSession owned(String email, String sessionId) {
-        Long userId = users.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found"))
-                .getId();
+        Long userId = findAuthenticatedCustomer(email).getId();
         return sessions.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Checkout session not found"));

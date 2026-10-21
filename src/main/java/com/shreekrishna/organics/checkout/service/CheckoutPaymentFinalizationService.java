@@ -167,7 +167,9 @@ public class CheckoutPaymentFinalizationService {
         s.setStatus("FINALIZED");
         sessions.saveAndFlush(s);
 
-        removePurchasedItemsFromCart(s.getUserId(), snapshots);
+        if (!"BUY_NOW".equals(s.getCheckoutSource())) {
+            removePurchasedItemsFromCart(s.getUserId(), snapshots);
+        }
         return new CheckoutVerifyResponse(s.getId(), s.getStatus(), o.getId());
     }
 
