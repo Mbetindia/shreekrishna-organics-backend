@@ -11,7 +11,7 @@ public record CheckoutDraftResponse(
         BigDecimal subtotal,
         BigDecimal totalAmount,
         String currency,
-        LocalDateTime expiresAt,
+        String expiresAt,
         List<Item> items
 ) {
     public record Item(Long variantId, String productName, String sku,
