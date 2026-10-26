@@ -11,33 +11,114 @@ public class ProductImage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // ==========================================
+    // PRODUCT RELATIONSHIP
+    // ==========================================
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(
             name = "product_id",
             nullable = false,
-            foreignKey = @ForeignKey(name = "fk_product_images_product")
+            foreignKey = @ForeignKey(
+                    name = "fk_product_images_product"
+            )
     )
     private Product product;
 
-    @Column(name = "image_url", nullable = false, length = 2048)
+    // ==========================================
+    // PRODUCT VARIANT RELATIONSHIP - NEW
+    // ==========================================
+
+    /*
+     * variant = null:
+     * Normal Product Primary / Gallery Image
+     *
+     * variant != null:
+     * Variant-specific Image
+     *
+     * Example:
+     * 500 ML -> Image A
+     * 1 L    -> Image B
+     * 5 L    -> Image C
+     */
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "variant_id",
+            foreignKey = @ForeignKey(
+                    name = "fk_product_images_variant"
+            )
+    )
+    private ProductVariant variant;
+
+    // ==========================================
+    // CLOUDINARY IMAGE DETAILS
+    // ==========================================
+
+    @Column(
+            name = "image_url",
+            nullable = false,
+            length = 2048
+    )
     private String imageUrl;
 
-    @Column(name = "public_id", nullable = false, unique = true, length = 255)
+    @Column(
+            name = "public_id",
+            nullable = false,
+            unique = true,
+            length = 255
+    )
     private String publicId;
 
-    @Column(name = "is_primary", nullable = false)
+    // ==========================================
+    // PRIMARY IMAGE
+    // ==========================================
+
+    /*
+     * Only normal product images can be primary.
+     *
+     * Variant images must always have primary = false.
+     */
+
+    @Column(
+            name = "is_primary",
+            nullable = false
+    )
     private Boolean primary = false;
 
-    @Column(name = "display_order", nullable = false)
+    // ==========================================
+    // IMAGE DISPLAY ORDER
+    // ==========================================
+
+    @Column(
+            name = "display_order",
+            nullable = false
+    )
     private Integer displayOrder = 0;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // ==========================================
+    // CREATED DATE
+    // ==========================================
+
+    @Column(
+            name = "created_at",
+            nullable = false,
+            updatable = false
+    )
     private LocalDateTime createdAt;
+
+    // ==========================================
+    // ENTITY LIFECYCLE
+    // ==========================================
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
+
+    // ==========================================
+    // GETTERS AND SETTERS
+    // ==========================================
 
     public Long getId() {
         return id;
@@ -49,6 +130,24 @@ public class ProductImage {
 
     public void setProduct(Product product) {
         this.product = product;
+    }
+
+    // NEW - VARIANT GETTER / SETTER
+
+    public ProductVariant getVariant() {
+        return variant;
+    }
+
+    public void setVariant(ProductVariant variant) {
+        this.variant = variant;
+    }
+
+    // NEW - VARIANT ID HELPER
+
+    public Long getVariantId() {
+        return variant != null
+                ? variant.getId()
+                : null;
     }
 
     public String getImageUrl() {

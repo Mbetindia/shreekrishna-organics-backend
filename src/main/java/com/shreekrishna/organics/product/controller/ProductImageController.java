@@ -1,4 +1,3 @@
-
 package com.shreekrishna.organics.product.controller;
 
 import com.shreekrishna.organics.product.dto.ProductImageResponse;
@@ -25,25 +24,81 @@ public class ProductImageController {
         this.imageService = imageService;
     }
 
-    // ADMIN - UPLOAD PRODUCT IMAGE
+    // =========================================================
+    // ADMIN - UPLOAD NORMAL OR VARIANT PRODUCT IMAGE
+    // =========================================================
+
+    /*
+     * NORMAL PRODUCT IMAGE:
+     *
+     * POST /api/v1/admin/products/{productId}/images
+     *
+     * FormData:
+     * file = image.jpg
+     *
+     * ---------------------------------------------------------
+     *
+     * VARIANT-SPECIFIC IMAGE:
+     *
+     * POST /api/v1/admin/products/{productId}/images
+     *
+     * FormData:
+     * file = image.jpg
+     * variantId = 21
+     *
+     * ---------------------------------------------------------
+     *
+     * If variantId is not provided:
+     *     Upload normal product image.
+     *
+     * If variantId is provided:
+     *     Upload or replace that variant's image.
+     */
+
     @PostMapping(
             value = "/admin/products/{productId}/images",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
     public ResponseEntity<ProductImageResponse> uploadImage(
             @PathVariable Long productId,
-            @RequestParam("file") MultipartFile file
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(
+                    value = "variantId",
+                    required = false
+            ) Long variantId
     ) throws IOException {
 
         ProductImageResponse response =
-                imageService.uploadImage(productId, file);
+                imageService.uploadImage(
+                        productId,
+                        file,
+                        variantId
+                );
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
     }
 
-    // PUBLIC - GET PRODUCT IMAGES
+    // =========================================================
+    // PUBLIC - GET ALL PRODUCT IMAGES
+    // =========================================================
+
+    /*
+     * Returns:
+     * - Normal primary image
+     * - Normal gallery images
+     * - Variant-specific images
+     *
+     * Each image includes variantId.
+     *
+     * variantId = null:
+     *     Normal product image.
+     *
+     * variantId != null:
+     *     Variant-specific image.
+     */
+
     @GetMapping("/products/{productId}/images")
     public ResponseEntity<List<ProductImageResponse>> getImages(
             @PathVariable Long productId
@@ -54,7 +109,17 @@ public class ProductImageController {
         );
     }
 
+    // =========================================================
     // ADMIN - SET PRIMARY PRODUCT IMAGE
+    // =========================================================
+
+    /*
+     * Only normal product images can be primary.
+     *
+     * Variant-specific images are rejected
+     * by ProductImageService.
+     */
+
     @PatchMapping(
             "/admin/products/{productId}/images/{imageId}/primary"
     )
@@ -64,12 +129,27 @@ public class ProductImageController {
     ) {
 
         ProductImageResponse response =
-                imageService.setPrimaryImage(productId, imageId);
+                imageService.setPrimaryImage(
+                        productId,
+                        imageId
+                );
 
         return ResponseEntity.ok(response);
     }
 
-    // ADMIN - DELETE PRODUCT IMAGE
+    // =========================================================
+    // ADMIN - DELETE NORMAL OR VARIANT PRODUCT IMAGE
+    // =========================================================
+
+    /*
+     * Works for:
+     * - Normal primary images
+     * - Normal gallery images
+     * - Variant-specific images
+     *
+     * Cloudinary cleanup is handled by ProductImageService.
+     */
+
     @DeleteMapping(
             "/admin/products/{productId}/images/{imageId}"
     )
@@ -78,7 +158,10 @@ public class ProductImageController {
             @PathVariable Long imageId
     ) {
 
-        imageService.deleteImage(productId, imageId);
+        imageService.deleteImage(
+                productId,
+                imageId
+        );
 
         return ResponseEntity.noContent().build();
     }

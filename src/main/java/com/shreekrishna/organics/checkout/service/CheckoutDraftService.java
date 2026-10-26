@@ -86,7 +86,7 @@ public class CheckoutDraftService {
     }
 
     private CheckoutDraftResponse createInternal(String username, Long addressId,
-                                                   Long buyNowVariantId, Integer buyNowQuantity) {
+                                                 Long buyNowVariantId, Integer buyNowQuantity) {
         User user = findAuthenticatedCustomer(username);
 
         // Same user-level lock as CustomerOrderService and CartService.
@@ -327,7 +327,16 @@ public class CheckoutDraftService {
                                 i.getUnitPrice(),
                                 i.getLineTotal()
                         ))
-                        .toList()
+                        .toList(),
+                session.getDeliveryCharge(),
+                items.stream().map(i -> i.getTaxAmount() == null ? BigDecimal.ZERO : i.getTaxAmount())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
+                items.stream().filter(i -> Boolean.TRUE.equals(i.getPriceIncludesGst()))
+                        .map(i -> i.getTaxAmount() == null ? BigDecimal.ZERO : i.getTaxAmount())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
+                items.stream().filter(i -> !Boolean.TRUE.equals(i.getPriceIncludesGst()))
+                        .map(i -> i.getTaxAmount() == null ? BigDecimal.ZERO : i.getTaxAmount())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add)
         );
     }
 

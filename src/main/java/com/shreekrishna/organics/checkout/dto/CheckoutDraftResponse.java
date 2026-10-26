@@ -12,7 +12,11 @@ public record CheckoutDraftResponse(
         BigDecimal totalAmount,
         String currency,
         LocalDateTime expiresAt,
-        List<Item> items
+        List<Item> items,
+        BigDecimal deliveryCharge,
+        BigDecimal taxAmount,
+        BigDecimal includedTaxAmount,
+        BigDecimal additionalTax
 ) {
     public record Item(Long variantId, String productName, String sku,
                        Integer quantity, BigDecimal unitPrice, BigDecimal lineTotal) {}
