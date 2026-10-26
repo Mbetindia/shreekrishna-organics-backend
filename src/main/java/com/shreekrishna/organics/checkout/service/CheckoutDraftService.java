@@ -28,6 +28,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -317,7 +319,14 @@ public class CheckoutDraftService {
                 session.getSubtotal(),
                 session.getTotalAmount(),
                 session.getCurrency(),
-                session.getExpiresAt(),
+                // Session timestamps are stored as server-local LocalDateTime.
+                // Send an explicit UTC instant so browsers in any timezone
+                // interpret the same expiration moment.
+                session.getExpiresAt() == null ? null : session.getExpiresAt()
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant()
+                        .truncatedTo(ChronoUnit.MILLIS)
+                        .toString(),
                 items.stream()
                         .map(i -> new CheckoutDraftResponse.Item(
                                 i.getVariantId(),
@@ -325,7 +334,10 @@ public class CheckoutDraftService {
                                 i.getSku(),
                                 i.getQuantity(),
                                 i.getUnitPrice(),
-                                i.getLineTotal()
+                                i.getLineTotal(),
+                                i.getGstRate(),
+                                i.getPriceIncludesGst(),
+                                i.getTaxAmount()
                         ))
                         .toList(),
                 session.getDeliveryCharge(),

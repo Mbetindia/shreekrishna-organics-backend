@@ -1,7 +1,6 @@
 package com.shreekrishna.organics.checkout.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 
 public record CheckoutDraftResponse(
@@ -11,7 +10,7 @@ public record CheckoutDraftResponse(
         BigDecimal subtotal,
         BigDecimal totalAmount,
         String currency,
-        LocalDateTime expiresAt,
+        String expiresAt,
         List<Item> items,
         BigDecimal deliveryCharge,
         BigDecimal taxAmount,
@@ -19,5 +18,6 @@ public record CheckoutDraftResponse(
         BigDecimal additionalTax
 ) {
     public record Item(Long variantId, String productName, String sku,
-                       Integer quantity, BigDecimal unitPrice, BigDecimal lineTotal) {}
+                       Integer quantity, BigDecimal unitPrice, BigDecimal lineTotal,
+                       BigDecimal gstRate, Boolean priceIncludesGst, BigDecimal taxAmount) {}
 }
